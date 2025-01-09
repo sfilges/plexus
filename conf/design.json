@@ -1,0 +1,13 @@
+{
+    "primer_length_range": [18, 30],
+    "amplicon_gap_range": [20, 60],
+    "max_amplicon_length": 100,
+    "junction_padding_bases": 3,
+    "initial_solutions": 100,
+    "top_solutions_to_keep": 4,
+    "minimum_plexity": 5,
+    "maximum_plexity": 20,
+    "target_plexity": 20,
+    "force_plexity": false,
+    "variant_threshold": 0.01
+}

@@ -6,6 +6,7 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 from src.hello import say_hello_to
 import pandas as pd
+import json
 
 say_hello_to("Stefan")
 
@@ -92,30 +93,31 @@ def read_junction_coordinates(csv_path):
     
     junctions = []
     for _, row in df.iterrows():
+        chrom = row['Chrom']
         five_prime = int(row['Five_Prime_Coordinate'])
         three_prime = int(row['Three_Prime_Coordinate'])
-        junctions.append([min(five_prime, three_prime), max(five_prime, three_prime)])
+        junctions.append([chrom, min(five_prime, three_prime), max(five_prime, three_prime)])
     
     return junctions
 
 def sort_junctions(junctions):
     """
-    Sort junctions by their start position.
+    Sort junctions first by chromosome and then by their start position.
     
     Args:
-        junctions (list): List of [min, max] coordinate pairs
+        junctions (list): List of [chrom, min, max] coordinate pairs
         
     Returns:
         list: Sorted list of junction pairs
     """
-    return sorted(junctions, key=lambda x: x[0])
+    return sorted(junctions, key=lambda x: (x[0], x[1]))
 
 def merge_adjacent_junctions(sorted_junctions, max_gap):
     """
     Merge junctions that are within the specified maximum gap.
     
     Args:
-        sorted_junctions (list): Sorted list of [min, max] coordinate pairs
+        sorted_junctions (list): Sorted list of [chrom, min, max] coordinate pairs
         max_gap (int): Maximum allowed gap between junctions to merge
         
     Returns:
@@ -128,11 +130,15 @@ def merge_adjacent_junctions(sorted_junctions, max_gap):
     current = sorted_junctions[0]
     
     for next_junction in sorted_junctions[1:]:
-        if current[1] + max_gap >= next_junction[0]:
+        # Only merge if on same chromosome and within max_gap
+        if (current[0] == next_junction[0] and  # same chromosome
+            # check if 5' position of current is within max_gap of 3' position of next junction
+            current[2] + max_gap >= next_junction[1]):  # within gap distance
             # Merge the junctions
             current = [
-                min(current[0], next_junction[0]),
-                max(current[1], next_junction[1])
+                current[0],  # keep chromosome
+                min(current[1], next_junction[1]),  # min position
+                max(current[2], next_junction[2])   # max position
             ]
         else:
             merged_junctions.append(current)
@@ -166,105 +172,28 @@ def process_and_merge_junctions(csv_path, design_parameters):
     
     return merged_junctions
 
-# ---------------// Hairpin analysis //------------------
-# Use primer3 to calculate hairpin
-# max seq length is 60 nucleotides
-# uses the thal library from primer3
-# results stored as ThermoResult object
-
-def calculate_hairpin(sequence, pcr_conditions):
+def load_parameters(config_path):
     """
-    Calculate hairpin thermodynamics for a DNA sequence.
+    Load primer design parameters from a JSON configuration file.
     
     Args:
-        sequence (str or Seq): DNA sequence to analyze
-        pcr_conditions (dict): PCR conditions including ion concentrations
+        config_path (str): Path to the JSON configuration file
         
     Returns:
-        ThermoResult: Primer3 thermodynamic analysis result
+        dict: Dictionary containing design parameters
     """
-    return primer3.bindings.calc_hairpin(
-        seq=str(sequence),
-        mv_conc=pcr_conditions['mv_concentration'],
-        dv_conc=pcr_conditions['dv_concentration'],
-        dntp_conc=pcr_conditions['dntp_concentration'],
-        dna_conc=pcr_conditions['dna_concentration'],
-        temp_c=37.0,  # Standard temperature for dG calculations
-        max_loop=30,
-        output_structure=False
-    )
+    try:
+        with open(config_path, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Design parameters file not found at: {config_path}")
+    except json.JSONDecodeError:
+        raise ValueError(f"Invalid JSON format in design parameters file: {config_path}")
 
-def calculate_melting_temperature(sequence, pcr_conditions):
-    """
-    Calculate melting temperature for a DNA sequence.
-    
-    Args:
-        sequence (str or Seq): DNA sequence to analyze
-        pcr_conditions (dict): PCR conditions including concentrations and temperature
-        
-    Returns:
-        float: Melting temperature in Celsius
-    """
-    return primer3.bindings.calc_tm(
-        seq=str(sequence),
-        mv_conc=pcr_conditions['mv_concentration'],
-        dv_conc=pcr_conditions['dv_concentration'],
-        dntp_conc=pcr_conditions['dntp_concentration'],
-        dna_conc=pcr_conditions['dna_concentration'],
-        dmso_conc=pcr_conditions['dmso_concentration'],
-        dmso_fact=pcr_conditions['dmso_fact'],
-        formamide_conc=pcr_conditions['formamide_concentration'],
-        annealing_temp_c=pcr_conditions['annealing_temperature'],
-        max_nn_length=60,
-        tm_method='santalucia',
-        salt_corrections_method='santalucia'
-    )
-
-def calculate_homodimer(sequence, pcr_conditions):
-    """
-    Calculate homodimer formation thermodynamics.
-    
-    Args:
-        sequence (str or Seq): DNA sequence to analyze
-        pcr_conditions (dict): PCR conditions including ion concentrations
-        
-    Returns:
-        ThermoResult: Primer3 thermodynamic analysis result
-    """
-    return primer3.bindings.calc_homodimer(
-        str(sequence),
-        mv_conc=pcr_conditions['mv_concentration'],
-        dv_conc=pcr_conditions['dv_concentration'],
-        dntp_conc=pcr_conditions['dntp_concentration'],
-        dna_conc=pcr_conditions['dna_concentration'],
-        temp_c=37.0,
-        max_loop=30,
-        output_structure=False
-    )
-
-def calculate_heterodimer(sequence1, sequence2, pcr_conditions):
-    """
-    Calculate heterodimer formation thermodynamics between two sequences.
-    
-    Args:
-        sequence1 (str or Seq): First DNA sequence
-        sequence2 (str or Seq): Second DNA sequence
-        pcr_conditions (dict): PCR conditions including ion concentrations
-        
-    Returns:
-        ThermoResult: Primer3 thermodynamic analysis result
-    """
-    return primer3.bindings.calc_heterodimer(
-        str(sequence1),
-        str(sequence2),
-        mv_conc=pcr_conditions['mv_concentration'],
-        dv_conc=pcr_conditions['dv_concentration'],
-        dntp_conc=pcr_conditions['dntp_concentration'],
-        dna_conc=pcr_conditions['dna_concentration'],
-        temp_c=37.0,
-        max_loop=30,
-        output_structure=False
-    )
+# loaded configuration files
+design_parameters = load_parameters("conf/design.json")
+pcr_conditions = load_parameters("conf/pcr.config")
+penalties = load_parameters("conf/penalties.config")
 
 # Example usage:
 # candidate_sequence = Seq("TTGTGAGTTTTTGAAATCTCTGTGA")
@@ -292,43 +221,6 @@ panel_name  = "test_panel"
 genome      = "hg38"
 sample_type = "cfDNA"
 protocol    = "simsen"
-
-# Get metadata
-design_parameters = {
-    "primer_length_range": [18, 30],
-    "amplicon_gap_range": [20, 80],
-    "junction_padding_bases": 3,
-    "initial_solutions": 100,
-    "top_solutions_to_keep": 4,
-    "minimum_plexity": 5,
-    "maximum_plexity": 20,
-    "target_plexity": 20,
-    "force_plexity": False,  # If True, the target_plexity will be used to force the plexity of the primers
-    "variant_threshold": 0.01
-}
-
-pcr_conditions = {
-    "annealing_temperature": 60,
-    "primer_concentration": 50,
-    "dntp_concentration": 0.6,
-    "dna_concentration": 50,
-    "mv_concentration": 50,
-    "dv_concentration": 1.5,
-    "dmso_concentration": 0.0,
-    "dmso_fact": 0.6,
-    "formamide_concentration": 0.8
-}
-
-penalties = {
-    "snp_penalty": 1.0,
-    "primer_length_penalty": 1.0,
-    "primer_complexity_penalty": 1.0,
-    "polyA_penalty": 5,
-    "polyT_penalty": 5,
-    "polyC_penalty": 10,
-    "polyG_penalty": 10,
-    "amplicon_length_penalty": 1.0
-}
 
 # Define and merge junctions
 # Each junction has a le
