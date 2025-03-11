@@ -1,24 +1,25 @@
 #-------------------------------------------// (3) OPTIMISER //----------------------------------
 #
-# DESIGNER is the core engine for creating all the primer and probe candidates and computing all the
-# thermodynamic aspects of design such as target unimolecular folding, primer folding, bimolecular
-# hybridization, and solving the multi-state coupled equilibria for the amount bound for the desired bimolecular
-# duplex. The amount bound is directly related to the amount of signal generated in a diagnostic assay.
-#
-# DESIGNER also analyzes each primer and probe design for a series of heuristic properties such as
-# sequence complexity, polyG test, oligo length penalty, amplicon length penalty, etc. Each of the scoring effects
-# are multiplied by weighting factors and combined into an overall score for each primer/ probe set.
-#
-# In December 2018 functionality was added to PanelPlex is support for dbSNP (for human genome
-# version GRCh38 and mouse genome version mm10). PanelPlex automatically detects all the positions with
-# alternative alleles with CAF > 0.01 within each of the design regions and then automatically designs the
-# primers to AVOID those SNP sites.
-#
-# 1. Generate potential solutions TODO Generate k-mers as initial solutions
-# 2. Score each solutions TODO define scoring algorithm, including SNP penalty
-# 3. Select top candidates for each target (init_solutions)
-# 4. BLAST against amplicons in panel and discard matches TODO implement BLAST search
-# 5. Keep top N solutions (top_solutions_to_keep)
-# 6. Perform multiplex picking in N^X space for N solutions and X targets TODO implement multiplex picker algorithm
-#
+# ThermoBLAST is the algorithm that is used to scan groups of primer candidates against the human
+# genome to deduce background false amplicons penalties (the penalties are a function of the percent 
+# bound for each of the primers and the length of the false amplicon). ThermoBLAST is also used to 
+# exclude primer candidates that cross-hybridize with desired amplicons. These two ThermoBLAST runs 
+# are shown in solid green boxes in the flowchart figure above. The ThermoBLAST step maximizes 
+# specificity by penalizing primers that have strong off-target hybridizations. See the white paper about 
+# ThermoBLAST to learn more about how it works (download from www.dnasoftware.com).
+# 
+# Lastly, MultiPick performs a mixing and matching of FP and RP candidates from different targets 
+# to make “multiplex solution sets”. MultiPick is run in 2 phases: first MultiPick analyzes all 100 
+# solutions from all the targets to determine all the exclusions and to then form a shorter list of 
+# 4 primer pair candidates for each of the N-plex targets. This shorter list of primer candidates 
+# is submitted to ThermoBLAST against the human genome to deduce all the possible false amplicons. 
+# For a 20-plex example, ThermoBLAST would consider 160 primers (i.e. 4 FP and 4 RP for 20 targets) 
+# against the human genome – such massive runs are only possible due to the high-performance 
+# cloud computing of Amazon Web Services and also clever algorithms written by DNA Software. 
+# In phase 2, MultiPick considers all 4N possible multiplex combinations that are possible and 
+# finds the combination(s) with the best score(s) consisting of Forward Primer and Reverse Primer 
+# (and optionally Probe and/or Reverse Transcription primer). For large N-plexes, the exponential 
+# explosion requires a sophisticated algorithm to solve the problem. DNA Software has developed s
+# uch an algorithm – that uses a depth-first search with pruning algorithm, an approach used in
+# 21st century artificial intelligence applications.
 #-----------------------------------------------------------------------------------------------
