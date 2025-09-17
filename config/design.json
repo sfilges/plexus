@@ -9,5 +9,7 @@
     "maximum_plexity": 20,
     "target_plexity": 20,
     "force_plexity": false,
-    "variant_threshold": 0.01
+    "variant_threshold": 0.01,
+    "5_primer_tail": "",
+    "3_prime_tail": ""
 }

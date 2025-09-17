@@ -6,7 +6,7 @@ import primer3
 # uses the thal library from primer3
 # results stored as ThermoResult object
 
-def calculate_hairpin(sequence, pcr_conditions):
+def primer3_calculate_hairpin(sequence, pcr_conditions):
     """
     Calculate hairpin thermodynamics for a DNA sequence.
     
@@ -28,7 +28,7 @@ def calculate_hairpin(sequence, pcr_conditions):
         output_structure=False
     )
 
-def calculate_melting_temperature(sequence, pcr_conditions):
+def primer3_calculate_melting_temperature(sequence, pcr_conditions):
     """
     Calculate melting temperature for a DNA sequence.
     
@@ -54,7 +54,7 @@ def calculate_melting_temperature(sequence, pcr_conditions):
         salt_corrections_method='santalucia'
     )
 
-def calculate_homodimer(sequence, pcr_conditions):
+def primer3_calculate_homodimer(sequence, pcr_conditions):
     """
     Calculate homodimer formation thermodynamics.
     
@@ -76,7 +76,7 @@ def calculate_homodimer(sequence, pcr_conditions):
         output_structure=False
     )
 
-def calculate_heterodimer(sequence1, sequence2, pcr_conditions):
+def primer3_calculate_heterodimer(sequence1, sequence2, pcr_conditions):
     """
     Calculate heterodimer formation thermodynamics between two sequences.
     
@@ -99,3 +99,15 @@ def calculate_heterodimer(sequence1, sequence2, pcr_conditions):
         max_loop=30,
         output_structure=False
     )
+
+def primer3_calculate_end_stability():
+    """
+    A ThermoResult object with thermodynamic characteristics of the 3’ hybridization interaction
+    """
+    return primer3.bindings.calc_end_stability()
+
+def primer3_design_primers(seq_args, global_args):
+    """
+    Run the Primer3 design process.
+    """
+    return primer3.bindings.design_primers()
