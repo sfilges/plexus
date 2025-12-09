@@ -23,44 +23,16 @@
 #
 #-----------------------------------------------------------------------------------------------
 
-def generate_kmers(k_min, k_max, sequence):
-    """
-    Generate k-mers as candidate primers
-    """
-    kmers = []
-    for k in range (k_min, k_max):
-        # max position to search
-        max_pos = len(sequence) + 1 - k
-        
-        for x in range(max_pos):
-            kmer = sequence[x:x+k]
-            kmers.append(kmer)
-
-    return(kmers)
-
-def filter_kmers(kmers, max_kmers = 100):
-    print("TODO")
-
-def filter_dbsnp(database):
-    print("TODO")
-
-def blast_search():
-    print("TODO")
+from primer3_port import choose_left_and_right_primers
 
 def main():
-    region = "CACAGGGTAGAGACAGATAACAAGGGATTCCTGACACCAAAAAAAAAAATACGCTGTAGATAGCTATAACATTTCAATAGGAATCTTGGGAATC"
-    k_min = min_primer_length
-    k_max = max_primer_length
-    
-    #-----// Generate k-mer solutions for targets
-    kmers = generate_kmers(k_min, k_max, region)
-    print(kmers)
-    print(len(kmers))
+    panel = choose_left_and_right_primers(
+        design_input_file = './data/design_regions.csv',
+        fasta_file = '/Users/ctosimsen/hg38/hg38.fa',
+        config_file = './config/designer_default_config.json'
+    )
 
-    # Test kmers against baisc criteria and rank, Retain at most max_kmers
-    ## Needs to handle too few or no viable kmers
-    kmers = filter_kmers(kmers, max_kmers = 100)
-
+    return(panel)
 
 if __name__=="__main__":
     main()
