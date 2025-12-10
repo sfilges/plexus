@@ -4,6 +4,13 @@ import subprocess
 import pandas as pd
 from Bio import Blast
 
+# What about?
+# https://github.com/jgans/thermonucleotideBLAST
+# or
+# https://github.com/soedinglab/MMseqs2
+# Hits are scored based on hybridization affinity rather than sequence similarity
+
+
 # https://github.com/JasonAHendry/multiply/blob/master/src/multiply/blast/runner.py
 class BlastRunner:
 

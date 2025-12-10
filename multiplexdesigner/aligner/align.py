@@ -1,24 +1,24 @@
 # Computes potential dimers betweeen pairs of primers
-
+#
 # The cross dimer or primer dimer check is an important design step to optimize primer performance in multiplex reactions. 
-# Oli2go uses Primer3's ntthal and the user-defined ΔG and Tm values to check for cross dimerization. Specific forward and 
-# reverse primer pairs resulting from the preceding design task form the input for this last workflow step. It starts with 
+# What algorithms to use?
+#
+# Examples are:
+# - Oli2go uses Primer3's ntthal and the user-defined ΔG and Tm values to check for cross dimerization.
+# - multiply uses the algorithm by by Johnston et al. (2019) Sci Reports: https://www.nature.com/articles/s41598-018-36612-9
+#
+# Both use thermodynamic alignment values to estimate primer dimer alignment.
+#
+# Specific forward and reverse primer pairs resulting from the preceding design task form the input for this workflow step. It starts with 
 # the input sequence that has fewest specific primers. These primers are checked against all other possible primers of the 
 # other input sequences. The first results involve primer pairs which do not exceed the cross dimerization thresholds. If the 
 # results contain at least one primer pair for each sequence, each one is checked against the other primers in the results. 
 # Finally, for each input sequence one primer pair forming no cross dimerization with all other sequences is returned.
 
-# What about?
-# https://github.com/jgans/thermonucleotideBLAST
-# or
-# https://github.com/soedinglab/MMseqs2
-# Hits are scored based on hybridization affinity rather than sequence similarity
-
 import json
 from itertools import product
 from dataclasses import dataclass, field
-from multiply.util.definitions import ROOT_DIR
-
+from multiplexdesigner.utils.root_dir import ROOT_DIR
 
 # ================================================================================
 # Define an alignment between two primers
@@ -42,7 +42,7 @@ class PrimerAlignment:
 # Primer alignment algorithms
 # ================================================================================
 
-class PrimerDimerLike:
+class PrimerDimerPredictor:
     """
     Align two primers using an algorithm like the one described
     by Johnston et al. (2019) Sci Reports: https://www.nature.com/articles/s41598-018-36612-9
@@ -57,7 +57,7 @@ class PrimerDimerLike:
 
     def __init__(self, param_path=None):
         """
-        Initialize the PrimerDimerLike aligner.
+        Initialize the PrimerDimerPredictor aligner.
         
         Parameters
         ----------
@@ -72,7 +72,7 @@ class PrimerDimerLike:
         
         # Load parameters
         if param_path is None:
-            param_path = f"{ROOT_DIR}/settings/alignment/primer_dimer/parameters.json"
+            param_path = f"{ROOT_DIR}/config/alignment_parameters.json"
         self.load_parameters(param_path)
 
     def set_primers(self, primer1, primer2, primer1_name, primer2_name):
