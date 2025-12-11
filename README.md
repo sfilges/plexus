@@ -1,5 +1,35 @@
 # multiplexDesigner
- 
+
+
+# Install
+
+Get the source code from GitHub:
+
+```
+git clone https://github.com/sfilges/multiplexDesigner
+```
+
+Then, install the software dependencies using conda:
+
+```
+cd multiplexDesigner
+conda update conda
+conda env create -f environment.yml
+conda activate multiplexdesigner-run
+```
+
+Finally, install `MultiplexDesigner` itself with pip:
+
+```
+pip install -e .
+```
+
+Test installation by running:
+
+```
+multiplexdesigner
+```
+
 ## Modules
 
 ### Preprocess

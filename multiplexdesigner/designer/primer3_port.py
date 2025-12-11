@@ -11,11 +11,7 @@ import warnings
 import json
 from dataclasses import dataclass
 from concurrent.futures import ProcessPoolExecutor
-from multiplexdesigner.designer.primer import Primer, PrimerPair, MultiplexPanel
-from multiplexdesigner.designer.junctions import PrimerContainer
-from multiplexdesigner.utils.pretty_cli import display_welcome
-from multiplexdesigner.utils.utils import setup_logger, create_primer_dataframe, gc_content, generate_kmers, filter_kmers, reverse_complement
-from multiplexdesigner.utils.root_dir import ROOT_DIR
+from multiplexdesigner.utils.utils import gc_content, generate_kmers, filter_kmers, reverse_complement
 
 # Kelvin to Celsius conversion factor
 T_KELVIN = 273.15
@@ -338,55 +334,35 @@ def seqtm(seq: str,
         return oligotm(seq, dna_conc, salt_conc, divalent_conc, dntp_conc,
                       dmso_conc, dmso_fact, formamide_conc, annealing_temp)
 
-# Initialise panel object
-def primer3_design_panel(name, genome, fasta_file, design_input_file, config_file = None, thal = 1, save_designs = True):
+
+def primer3_design_panel(panel_logger, thal = 1, save_designs = False):
     """
     Create a panel object and calculate junctions. Then run primer3 design on the junctions
     and retain the top primers for each juction.
 
     Returns a MultiplexPanel object.
     """
+    panel = panel_logger[1]
+    logger = panel_logger[0]
 
-    # Instatiate logger
-    logger = setup_logger()
-
-    # Load the default configuration if none is specified by the user
-    # TODO: Move this into the load_config method of the MultiplexPanel class
-    if config_file is None:
-        logger.info(f"No config file provided by the user, using default configuration: {config_file}")
-        config_file = f"{ROOT_DIR}/config/designer_default_config.json"
-    else:
-        logger.info(f"Using user-provided config file: {config_file}")
-
-    # Instatiate the multiplex panel object and retrieve design regions.
-    panel = MultiplexPanel("test_panel", "hg38")
-    panel.load_config(config_path=config_file, logger = logger)
-    panel.import_junctions_csv(file_path = design_input_file, logger = logger)
-    panel.merge_close_junctions(logger = logger)
-    panel.extract_design_regions_from_fasta(fasta_file, logger = logger, padding = 200)
-    panel.calculate_junction_coordinates_in_design_region()
+    num_expected = panel.config['singleplex_design_parameters']['PRIMER_NUM_RETURN']
 
     for junction in panel.junctions:
-        # This tag allows detailed specification of possible locations of left and right primers in primer pairs.
-        # The associated value must be a semicolon-separated list of
-        # <left_start>,<left_length>,<right_start>,<right_length>
 
         min_product_length = 2 * panel.config['singleplex_design_parameters']['primer_min_length'] + junction.jmax_coordinate - junction.jmin_coordinate
         max_product_length = panel.config['singleplex_design_parameters']['max_amplicon_length']
 
-        # Set global design arguments
+        # Set global design arguments for primer3. For details check the [manual](https://primer3.org/manual.html)
         global_args={
-            'PRIMER_THERMODYNAMIC_OLIGO_ALIGNMENT': thal,                # If set to 1, use thermodynamic values (parameters ending in "_TH")
+            'PRIMER_THERMODYNAMIC_OLIGO_ALIGNMENT': thal,     # If set to 1, use thermodynamic values (parameters ending in "_TH")
             'PRIMER_THERMODYNAMIC_TEMPLATE_ALIGNMENT': thal,
             'PRIMER_TM_FORMULA': 1,
             'PRIMER_SALT_CORRECTIONS': 1,
-            'PRIMER_NUM_RETURN': panel.config['singleplex_design_parameters']['PRIMER_NUM_RETURN'],
+            'PRIMER_NUM_RETURN': num_expected,
             'PRIMER_OPT_SIZE': panel.config['singleplex_design_parameters']['PRIMER_OPT_SIZE'],
             'PRIMER_MIN_SIZE': panel.config['singleplex_design_parameters']['primer_min_length'],
             'PRIMER_MAX_SIZE': panel.config['singleplex_design_parameters']['primer_max_length'],
-            'PRIMER_PRODUCT_OPT_SIZE': 60,
-            'PRIMER_PAIR_WT_PRODUCT_SIZE_LT': 0.5,
-            'PRIMER_PAIR_WT_PRODUCT_SIZE_GT': 2.0,
+            'PRIMER_PRODUCT_OPT_SIZE': panel.config['singleplex_design_parameters']['PRIMER_PRODUCT_OPT_SIZE'],
             'PRIMER_OPT_TM': panel.config['singleplex_design_parameters']['PRIMER_OPT_TM'],
             'PRIMER_MIN_TM': panel.config['singleplex_design_parameters']['PRIMER_MIN_TM'],
             'PRIMER_MAX_TM': panel.config['singleplex_design_parameters']['PRIMER_MAX_TM'],
@@ -428,37 +404,57 @@ def primer3_design_panel(name, genome, fasta_file, design_input_file, config_fil
             'PRIMER_PAIR_WT_COMPL_ANY_TH': 5.0,
             'PRIMER_PAIR_WT_COMPL_END_TH': 5.0,
             'PRIMER_PAIR_WT_TEMPLATE_MISPRIMING_TH': 1.0,
+            'PRIMER_PAIR_WT_PRODUCT_SIZE_LT': panel.config['singleplex_design_parameters']['PRIMER_PAIR_WT_PRODUCT_SIZE_LT'],
+            'PRIMER_PAIR_WT_PRODUCT_SIZE_GT': panel.config['singleplex_design_parameters']['PRIMER_PAIR_WT_PRODUCT_SIZE_GT'],
             'PRIMER_PRODUCT_SIZE_RANGE': [[min_product_length, max_product_length]]
         }
 
-        ok_regions_list = [1,junction.jmin_coordinate,junction.jmax_coordinate,junction.junction_length-junction.jmax_coordinate]
+        # This tag allows detailed specification of possible locations of left and right primers in primer pairs.
+        # The associated value must be a semicolon-separated list of
+        # <left_start>,<left_length>,<right_start>,<right_length>
 
-        # Set the sequence arguments
+        ok_regions_list = [1,junction.jmin_coordinate,junction.jmax_coordinate,len(junction.design_region)-junction.jmax_coordinate]
+    
+        # Set the sequence arguments for primer3
         seq_args={
             'SEQUENCE_ID': junction.name,
             'SEQUENCE_TEMPLATE': junction.design_region,
             'SEQUENCE_PRIMER_PAIR_OK_REGION_LIST': [ok_regions_list]
         }
 
-        logger.info(f"Running primer3 for target junction: {junction.name}")
+        logger.info(f"Running primer3 design engine for target junction: {junction.name}")
 
-        results = primer3.bindings.design_primers(
+        # Store primer3 designs in junction object
+        junction.primer3_designs = primer3.bindings.design_primers(
             seq_args=seq_args,
             global_args=global_args
         )
 
-        junction.primer3_designs = results
+        # Log complete primer3 output as a single row.
+        #logger.info(junction.primer3_designs)
+        
+        # Formated primer3 log:
+        logger.info(f"Design region size (nt): {len(junction.design_region)}")
+        logger.info(f"Okay regions (<left_start>,<left_length>,<right_start>,<right_length>): {ok_regions_list}")
+        logger.info(f"LEFT EXPLAIN ({junction.name}): {junction.primer3_designs["PRIMER_LEFT_EXPLAIN"]}")
+        logger.info(f"RIGHT EXPLAIN ({junction.name}): {junction.primer3_designs["PRIMER_RIGHT_EXPLAIN"]}")
+        logger.info(f"PAIR EXPLAIN ({junction.name}): {junction.primer3_designs["PRIMER_PAIR_EXPLAIN"]}")
+        logger.info(f"PRIMER_LEFT_RETURNED ({junction.name}): {junction.primer3_designs["PRIMER_LEFT_NUM_RETURNED"]}")
+        logger.info(f"PRIMER_RIGHT_RETURNED ({junction.name}): {junction.primer3_designs["PRIMER_RIGHT_NUM_RETURNED"]}")
+        logger.info(f"PRIMER_PAIR_RETURNED ({junction.name}): {junction.primer3_designs["PRIMER_PAIR_NUM_RETURNED"]}")
 
-        logger.info(f"LEFT EXPLAIN ({junction.name}): {results["PRIMER_LEFT_EXPLAIN"]}")
-        logger.info(f"RIGHT EXPLAIN ({junction.name}): {results["PRIMER_RIGHT_EXPLAIN"]}")
-        logger.info(f"PAIR EXPLAIN ({junction.name}): {results["PRIMER_PAIR_EXPLAIN"]}")
-        logger.info(junction.primer3_designs)
+        if junction.primer3_designs["PRIMER_PAIR_NUM_RETURNED"] == 0:
+            logger.warning(f"No suitable primer pairs found for junction: {junction.name}")
+            tm_range = f"Tm range: {panel.config['singleplex_design_parameters']['PRIMER_MIN_TM']} - {panel.config['singleplex_design_parameters']['PRIMER_MAX_TM']}"
+            logger.info(f"{tm_range}. Consider increasing the Tm range.")
+        elif junction.primer3_designs["PRIMER_PAIR_NUM_RETURNED"] < num_expected:
+            logger.warning(f"Fewer primer pairs found than desired: {num_expected}")
 
         # Save design to file
         if save_designs:
             outfile = f"{junction.name}_primer3_out.json"
             with open(outfile, 'w') as f:
-                json.dump(results, f)
+                json.dump(junction.primer3_designs, f, indent = 4)
             logger.info(f"Saving primer3 designs to file: {outfile}")
 
     return(panel)
@@ -681,6 +677,7 @@ def calculate_single_primer_thermodynamics(primer_list, config, logger):
         # Primer 3'-end stability penalty
         primer_penalty += PRIMER_WT_END_STABILITY * PRIMER_END_STABILITY
 
+        # TODO: This should return a Primer object instead
         good_primer = {
             "primer_sequence": primer,
             "primer_tm": primer_tm,
@@ -732,7 +729,8 @@ def calculate_single_primer_thermodynamics_parallel(left_kmers, right_kmers, con
     
     return left_future.result(), right_future.result()
 
-def choose_left_and_right_primers(design_input_file: str, fasta_file: str, config_file: str, parallel: bool = False):
+
+def choose_left_and_right_primers(panel_logger, parallel: bool = False):
     """
     A function that picks individual primers left and right of the provided junctions.
 
@@ -749,16 +747,8 @@ def choose_left_and_right_primers(design_input_file: str, fasta_file: str, confi
     # Pretty CLI interface
     #display_welcome()
 
-    # Instatiate logger
-    logger = setup_logger()
-
-    # Instatiate the multiplex panel object and retrieve design regions.
-    panel = MultiplexPanel("test_panel", "hg38")
-    panel.load_config(config_path=config_file)
-    panel.import_junctions_csv(file_path = design_input_file, logger = logger)
-    panel.merge_close_junctions(logger = logger)
-    panel.extract_design_regions_from_fasta(fasta_file, logger = logger, padding = 200)
-    panel.calculate_junction_coordinates_in_design_region()
+    panel = panel_logger[1]
+    logger = panel_logger[0]
 
     min_primer_length = panel.config['singleplex_design_parameters']['primer_min_length']
     max_primer_length = panel.config['singleplex_design_parameters']['primer_max_length']

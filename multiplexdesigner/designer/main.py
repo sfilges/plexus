@@ -23,7 +23,7 @@
 #
 #-----------------------------------------------------------------------------------------------
 
-from primer3_port import choose_left_and_right_primers
+from multiplexdesigner.designer.primer3_port import choose_left_and_right_primers
 
 def main():
     panel = choose_left_and_right_primers(

@@ -1,6 +1,5 @@
 primer3-py==2.2.0
 ispcr==0.9.1
 pysam=0.23.3
-pandas
-sqlite
-pretty_cli
+pandas=2.3.2
+rich=14.1.0

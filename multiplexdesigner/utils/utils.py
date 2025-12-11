@@ -2,7 +2,6 @@ import pandas as pd
 import warnings
 import logging
 from datetime import datetime
-from multiplexdesigner.designer.primer import MultiplexPanel
 
 def setup_logger():
     # Create a timestamp for the log file
@@ -17,59 +16,6 @@ def setup_logger():
     )
 
     return logging.getLogger()
-
-
-# Helper function for complete workflow
-def process_multiplex_panel(csv_file: str, fasta_file: str, config_file: str = None, 
-                           panel_name: str = "multiplex_panel", output_dir: str = ".",
-                           padding: int = 200):
-    """Complete workflow for processing a multiplex panel"""
-    
-    print(f"Processing multiplex panel: {panel_name}")
-    
-    # Initialize panel
-    panel = MultiplexPanel(panel_name, "hg38")
-    
-    # Load configuration
-    if config_file:
-        panel.load_config(config_file)
-    else:
-        panel.load_config()  # Use defaults
-    
-    # Step 1: Import junctions
-    print("\nStep 1: Importing junctions...")
-    panel.import_junctions_csv(csv_file)
-    
-    # Step 2: Merge close junctions
-    print("\nStep 2: Merging close junctions...")
-    panel.merge_close_junctions()
-    
-    # Step 3: Extract design regions
-    print("\nStep 3: Extracting design regions...")
-    panel.extract_design_regions_from_fasta(fasta_file, padding=padding)
-    
-    # Step 4: Calculate junction coordinates
-    print("\nStep 4: Calculating junction coordinates...")
-    panel.calculate_junction_coordinates_in_design_region()
-    
-    # Step 5: Verify coordinates
-    print("\nStep 5: Verifying coordinates...")
-    panel.verify_junction_coordinates()
-    
-    # Step 6: Export results
-    print("\nStep 6: Exporting results...")
-    import os
-    junction_table_file = os.path.join(output_dir, f"{panel_name}_junctions.csv")
-    panel_data_file = os.path.join(output_dir, f"{panel_name}_complete.json")
-    
-    panel.export_junction_table(junction_table_file)
-    panel.save_panel(panel_data_file)
-    
-    print(f"\nPanel processing complete!")
-    print(f"Junction table saved to: {junction_table_file}")
-    print(f"Complete panel data saved to: {panel_data_file}")
-    
-    return panel
 
 
 def gc_content(sequence: str) -> float:
