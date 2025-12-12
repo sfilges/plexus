@@ -20,7 +20,7 @@ from multiplexdesigner.utils.root_dir import ROOT_DIR
 # ================================================================================
 # A class to hold primer designs and design metrics.
 # ================================================================================
-# TODO: This should be added to each Junction, containing the designed primers and design metrics.
+
 @dataclass
 class PrimerDesigns:
     """

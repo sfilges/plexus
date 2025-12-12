@@ -2,6 +2,7 @@ import pandas as pd
 import warnings
 import logging
 from datetime import datetime
+from multiplexdesigner.designer.primer import Primer
 
 # TODO: Implement fasta conversion of primer sequences for BLAST input
 def write_fasta_from_dict(input_dt, output_fasta):
@@ -165,35 +166,96 @@ def create_primer_dataframe(primer_data):
 
     return(df_pairs)
 
+#===============================================
+# Main function to generate candidate primers
+#===============================================
 
-def generate_kmers(sequence, k_min: int = 18, k_max: int = 25):
+def generate_kmers(
+    target_name: str,
+    target_sequence: str,
+    logger: object,
+    orientation: str,
+    k_min: int = 18,
+    k_max: int = 25,
+    max_poly_X: int = 4,
+    max_N: int = 0,
+    min_gc: int = 30,
+    max_gc: int = 70
+    ) -> list:
     """
     Generate k-mers as candidate primers.
 
     Args:
-        sequence - Region from which to extract kmers
+        target_name - Name of the target region, will be used for naming candidate primers
+        target_sequence - Region from which to extract kmers
+        orientation - Either forward or reverse
         k_min - Minimum length of kmers
         k_max - Maximum length of kmers
+        max_poly_X - Max number of times a base can occur in a row, .e.g AAAAA
+        max_N - Max times N bases can occur anywhere in the kmer
+        min_gc - Minimum GC content of kmer
+        max_gc - Maximum GC content of kmer
     """
     if k_min >= k_max:
-        raise ValueError(f'Min kmer length ({k_min}) must be smaller than max kmer length ({k_max})')
+        error_msg = f'Min kmer length ({k_min}) must be smaller than max kmer length ({k_max})'
+        logger.error(error_msg)
+        raise ValueError(error_msg)
 
     if k_min < 10 or k_min > 20:
-        warnings.warn(f'Provided value for kmin, {k_min}, is outside the expected range: 10 - 20')
+        warn_msg = f'Provided value for kmin, {k_min}, is outside the expected range: 10 - 20'
+        logger.warning(warn_msg)
+        warnings.warn(warn_msg)
 
     if k_max < 20 or k_max > 30:
-        warnings.warn(f'Provided value for kmax, {k_max}, is outside the expected range: 20 - 30')
+        warn_msg = f'Provided value for kmax, {k_max}, is outside the expected range: 20 - 30'
+        logger.warning(warn_msg)
+        warnings.warn(warn_msg)
 
     kmers = []
+    kmer_counter = 0
+    kmer_filtered_counter = 0
     for k in range(k_min, k_max):
         # max position to search
-        max_pos = len(sequence) + 1 - k
+        max_pos = len(target_sequence) + 1 - k
         
         for x in range(max_pos):
-            kmer = sequence[x:x+k]
-            kmers.append(kmer)
+            kmer_counter += 1
+            kmer = target_sequence[x:x+k]
+
+            if check_kmer(kmer, max_poly_X=max_poly_X,max_N=max_N,min_gc=min_gc,max_gc=max_gc):
+                kmer_filtered_counter += 1
+                # If pass: Instantiate kmer as Primer object
+                good_kmer = Primer(
+                    name =  f"{target_name}_{kmer_filtered_counter}_{orientation}",
+                    seq =  kmer,
+                    direction =  orientation,
+                    start =  x,
+                    length =  k,
+                )
+
+                kmers.append(good_kmer)
+
+    logger.info(f"{orientation}: Found {kmer_filtered_counter} good kmers out of {kmer_counter} kmers checked.")
     
     return(kmers)
+
+def check_kmer(
+    kmer,
+    max_poly_X: int = 4,
+    max_N: int = 0,
+    min_gc: int = 30,
+    max_gc: int = 70
+) -> bool:
+    """
+    Filter kmers (putative primers) based on GC-content, number of 'N' bases,
+    and number of repeated bases (polyX).
+    """
+    kmer_gc = gc_content(kmer)
+    return (
+        min_gc <= kmer_gc <= max_gc               # Should be True
+        and not check_N_in_kmers(kmer, max_N)     # Should be false
+        and not find_max_poly_X(kmer, max_poly_X) # Should be false
+    )
 
 def filter_kmers(kmers, max_poly_X = 4, max_N = 0):
     """

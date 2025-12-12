@@ -10,6 +10,7 @@ import math
 import multiprocessing
 from dataclasses import dataclass
 from concurrent.futures import ProcessPoolExecutor
+from multiplexdesigner.designer.primer import Primer
 from multiplexdesigner.utils.utils import gc_content
 
 # Kelvin to Celsius conversion factor
@@ -334,7 +335,7 @@ def seqtm(seq: str,
                       dmso_conc, dmso_fact, formamide_conc, annealing_temp)
 
 
-def calculate_single_primer_thermodynamics(primer_list, config, logger):
+def calculate_single_primer_thermodynamics(primer_list, config, logger, orientation: str):
     """
     Function to calculate thermodynamic properties of a list of individual primers.
     Sequence-specific parameters (e.g. GC-content, GC clamp, etc.) are calculated
@@ -564,6 +565,23 @@ def calculate_single_primer_thermodynamics(primer_list, config, logger):
             'primer_max_end_th': PRIMER_MAX_SELF_END_TH,
             'primer_end_stability': PRIMER_END_STABILITY
         }
+
+        final_primer = Primer(
+            name =  "",
+            seq =  primer,
+            direction =  orientation,
+            start =  1,
+            length =  2,
+            bound =  primer_bound,
+            tm =  primer_tm,
+            gc =  primer_gc,
+            penalty =  round(primer_penalty,1),
+            self_any_th =  PRIMER_SELF_ANY_TH,
+            self_end_th =  PRIMER_MAX_SELF_END_TH,
+            hairpin_th =  PRIMER_MAX_HAIRPIN_TH,
+            end_stability = PRIMER_END_STABILITY,
+            engine = "custom"
+        )
 
         good_primers.append(good_primer)
 

@@ -59,6 +59,7 @@ def design_primers(multiplexpanel, parallel: bool = False):
             raise ValueError("Right primer region less than 2x max_primer_length")
 
         # Generate k-mer solutions for left and right target regions (all possible sequences within min/max primer length)
+        # TODO: these should generate Primer objects instead
         left_kmers = generate_kmers(left_region, min_primer_length, max_primer_length)
         right_kmers = generate_kmers(right_region, min_primer_length, max_primer_length)
         logger.info(f'kmers to evaluate: Left: {len(left_kmers)}; Right: {len(right_kmers)}')
@@ -88,8 +89,8 @@ def design_primers(multiplexpanel, parallel: bool = False):
             # Run both left and right primers at the same time using 
             left_primers, right_primers = calculate_single_primer_thermodynamics_parallel(left_kmers = left_kmers, right_kmers = right_kmers, config = panel.config, logger = logger)
         else:
-            left_primers, left_eval_string = calculate_single_primer_thermodynamics(left_kmers, panel.config, logger)
-            right_primers, right_eval_string = calculate_single_primer_thermodynamics(right_kmers, panel.config, logger)
+            left_primers, left_eval_string = calculate_single_primer_thermodynamics(left_kmers, panel.config, logger, orientation = "left")
+            right_primers, right_eval_string = calculate_single_primer_thermodynamics(right_kmers, panel.config, logger, orientation = "right")
 
         # TODO: Actually generate table or primers to output
         primer_table = [left_primers, right_primers]
