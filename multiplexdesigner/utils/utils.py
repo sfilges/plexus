@@ -3,6 +3,19 @@ import warnings
 import logging
 from datetime import datetime
 
+# TODO: Implement fasta conversion of primer sequences for BLAST input
+def write_fasta_from_dict(input_dt, output_fasta):
+    """
+    Write a `.fasta` file to `output_fasta` from an input dictionary
+    `input_dt`
+
+    """
+    with open(output_fasta, "w") as fasta:
+        for header, seq in input_dt.items():
+            fasta.write(f">{header}\n")
+            fasta.write(f"{seq}\n")
+
+
 def setup_logger():
     # Create a timestamp for the log file
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")

@@ -1,17 +1,16 @@
-"""
-Oligonucleotide melting temperature calculations.
+# ================================================================================
+# Oligonucleotide melting temperature calculations.
+# 
+# Based on the oligotm.c library from Primer3.
+# Copyright (c) 1996-2007 Whitehead Institute for Biomedical Research
+# ================================================================================
 
-Based on the oligotm.c library from Primer3.
-Copyright (c) 1996-2007 Whitehead Institute for Biomedical Research
-"""
 import primer3
 import math
 import multiprocessing
-import warnings
-import json
 from dataclasses import dataclass
 from concurrent.futures import ProcessPoolExecutor
-from multiplexdesigner.utils.utils import gc_content, generate_kmers, filter_kmers, reverse_complement
+from multiplexdesigner.utils.utils import gc_content
 
 # Kelvin to Celsius conversion factor
 T_KELVIN = 273.15
@@ -43,7 +42,7 @@ class InvalidConcentrationError(OligotmError):
     """Raised when concentration values are invalid."""
     pass
 
-# TODO: Consider moving these to the config folder.
+# TODO: Consider moving these tables to the config folder.
 # SantaLucia (1998) parameters
 # Entropy values (DS) in 0.1 cal/(K·mol)
 DS_PARAMS = {
@@ -335,131 +334,6 @@ def seqtm(seq: str,
                       dmso_conc, dmso_fact, formamide_conc, annealing_temp)
 
 
-def primer3_design_panel(panel_logger, thal = 1, save_designs = False):
-    """
-    Create a panel object and calculate junctions. Then run primer3 design on the junctions
-    and retain the top primers for each juction.
-
-    Returns a MultiplexPanel object.
-    """
-    panel = panel_logger[1]
-    logger = panel_logger[0]
-
-    num_expected = panel.config['singleplex_design_parameters']['PRIMER_NUM_RETURN']
-
-    for junction in panel.junctions:
-
-        min_product_length = 2 * panel.config['singleplex_design_parameters']['primer_min_length'] + junction.jmax_coordinate - junction.jmin_coordinate
-        max_product_length = panel.config['singleplex_design_parameters']['max_amplicon_length']
-
-        # Set global design arguments for primer3. For details check the [manual](https://primer3.org/manual.html)
-        global_args={
-            'PRIMER_THERMODYNAMIC_OLIGO_ALIGNMENT': thal,     # If set to 1, use thermodynamic values (parameters ending in "_TH")
-            'PRIMER_THERMODYNAMIC_TEMPLATE_ALIGNMENT': thal,
-            'PRIMER_TM_FORMULA': 1,
-            'PRIMER_SALT_CORRECTIONS': 1,
-            'PRIMER_NUM_RETURN': num_expected,
-            'PRIMER_OPT_SIZE': panel.config['singleplex_design_parameters']['PRIMER_OPT_SIZE'],
-            'PRIMER_MIN_SIZE': panel.config['singleplex_design_parameters']['primer_min_length'],
-            'PRIMER_MAX_SIZE': panel.config['singleplex_design_parameters']['primer_max_length'],
-            'PRIMER_PRODUCT_OPT_SIZE': panel.config['singleplex_design_parameters']['PRIMER_PRODUCT_OPT_SIZE'],
-            'PRIMER_OPT_TM': panel.config['singleplex_design_parameters']['PRIMER_OPT_TM'],
-            'PRIMER_MIN_TM': panel.config['singleplex_design_parameters']['PRIMER_MIN_TM'],
-            'PRIMER_MAX_TM': panel.config['singleplex_design_parameters']['PRIMER_MAX_TM'],
-            'PRIMER_PAIR_MAX_DIFF_TM': panel.config['singleplex_design_parameters']['primer_pair_max_tm_difference'],
-            'PRIMER_SALT_MONOVALENT': panel.config['pcr_conditions']['mv_concentration'],           # The millimolar (mM) concentration of monovalent salt cations (usually KCl) in the PCR.
-            'PRIMER_SALT_DIVALENT': panel.config['pcr_conditions']['dv_concentration'],             # The millimolar concentration of divalent salt cations (usually MgCl^(2+)) in the PCR. 
-            'PRIMER_DNA_CONC': panel.config['pcr_conditions']['primer_concentration'],
-            'PRIMER_DNTP_CONC': panel.config['pcr_conditions']['dntp_concentration'],               # Millimolar concentration of the sum of all deoxyribonucleotide triphosphates (e.g. 4x 0.2=0.8)
-            'PRIMER_DMSO_CONC': panel.config['pcr_conditions']['dmso_concentration'],
-            'PRIMER_FORMAMIDE_CONC': panel.config['pcr_conditions']['formamide_concentration'],
-            'PRIMER_OPT_GC_PERCENT': panel.config['singleplex_design_parameters']['PRIMER_OPT_GC_PERCENT'],     # Optimum GC percent. This parameter influences primer selection only if PRIMER_WT_GC_PERCENT_GT or PRIMER_WT_GC_PERCENT_LT are non-0.
-            'PRIMER_MIN_GC': panel.config['singleplex_design_parameters']['primer_min_gc'],
-            'PRIMER_MAX_GC': panel.config['singleplex_design_parameters']['primer_max_gc'],
-            'PRIMER_GC_CLAMP': 0,
-            'PRIMER_MAX_END_GC': 4,
-            'PRIMER_MAX_END_STABILITY': panel.config['singleplex_design_parameters']['PRIMER_MAX_END_STABILITY'],
-            'PRIMER_MAX_POLY_X': panel.config['singleplex_design_parameters']['primer_max_poly_x'],
-            'PRIMER_MAX_NS_ACCEPTED': 0,
-            'PRIMER_MAX_SELF_ANY': 8.0,
-            'PRIMER_MAX_SELF_END': 3.0,
-            'PRIMER_PAIR_MAX_COMPL_ANY': 8.0,
-            'PRIMER_PAIR_MAX_COMPL_END': 8.0,
-            'PRIMER_MAX_SELF_ANY_TH': panel.config['singleplex_design_parameters']['PRIMER_MAX_SELF_ANY_TH'],
-            'PRIMER_MAX_SELF_END_TH': panel.config['singleplex_design_parameters']['PRIMER_MAX_SELF_END_TH'],
-            'PRIMER_PAIR_MAX_COMPL_ANY_TH': panel.config['singleplex_design_parameters']['PRIMER_PAIR_MAX_COMPL_ANY_TH'],
-            'PRIMER_PAIR_MAX_COMPL_END_TH': panel.config['singleplex_design_parameters']['PRIMER_PAIR_MAX_COMPL_END_TH'],
-            'PRIMER_MAX_HAIRPIN_TH': panel.config['singleplex_design_parameters']['PRIMER_MAX_HAIRPIN_TH'],
-            'PRIMER_MAX_TEMPLATE_MISPRIMING_TH': panel.config['singleplex_design_parameters']['PRIMER_MAX_TEMPLATE_MISPRIMING_TH'],
-            'PRIMER_PAIR_MAX_TEMPLATE_MISPRIMING_TH': panel.config['singleplex_design_parameters']['PRIMER_PAIR_MAX_TEMPLATE_MISPRIMING_TH'],
-            'PRIMER_WT_SIZE_LT': panel.config['singleplex_design_parameters']['primer_length_penalty'],       # Penalty weight for primers shorter than PRIMER_OPT_SIZE.
-            'PRIMER_WT_SIZE_GT': panel.config['singleplex_design_parameters']['primer_length_penalty'],       # Penalty weight for primers longer than PRIMER_OPT_SIZE.
-            'PRIMER_WT_GC_PERCENT_LT': panel.config['singleplex_design_parameters']['PRIMER_WT_GC_PERCENT_LT'],                                          # Penaly weight for lower than opt GC content
-            'PRIMER_WT_GC_PERCENT_GT': panel.config['singleplex_design_parameters']['PRIMER_WT_GC_PERCENT_GT'],                                          # Penaly weight for greater than opt GC content
-            'PRIMER_WT_SELF_ANY': 5.0,
-            'PRIMER_WT_SELF_ANY_TH': 5.0,
-            'PRIMER_WT_HAIRPIN_TH': 1.0,
-            'PRIMER_WT_TEMPLATE_MISPRIMING_TH': 1.0,
-            'PRIMER_PAIR_WT_COMPL_ANY': 5.0,
-            'PRIMER_PAIR_WT_COMPL_ANY_TH': 5.0,
-            'PRIMER_PAIR_WT_COMPL_END_TH': 5.0,
-            'PRIMER_PAIR_WT_TEMPLATE_MISPRIMING_TH': 1.0,
-            'PRIMER_PAIR_WT_PRODUCT_SIZE_LT': panel.config['singleplex_design_parameters']['PRIMER_PAIR_WT_PRODUCT_SIZE_LT'],
-            'PRIMER_PAIR_WT_PRODUCT_SIZE_GT': panel.config['singleplex_design_parameters']['PRIMER_PAIR_WT_PRODUCT_SIZE_GT'],
-            'PRIMER_PRODUCT_SIZE_RANGE': [[min_product_length, max_product_length]]
-        }
-
-        # This tag allows detailed specification of possible locations of left and right primers in primer pairs.
-        # The associated value must be a semicolon-separated list of
-        # <left_start>,<left_length>,<right_start>,<right_length>
-
-        ok_regions_list = [1,junction.jmin_coordinate,junction.jmax_coordinate,len(junction.design_region)-junction.jmax_coordinate]
-    
-        # Set the sequence arguments for primer3
-        seq_args={
-            'SEQUENCE_ID': junction.name,
-            'SEQUENCE_TEMPLATE': junction.design_region,
-            'SEQUENCE_PRIMER_PAIR_OK_REGION_LIST': [ok_regions_list]
-        }
-
-        logger.info(f"Running primer3 design engine for target junction: {junction.name}")
-
-        # Store primer3 designs in junction object
-        junction.primer3_designs = primer3.bindings.design_primers(
-            seq_args=seq_args,
-            global_args=global_args
-        )
-
-        # Log complete primer3 output as a single row.
-        #logger.info(junction.primer3_designs)
-        
-        # Formated primer3 log:
-        logger.info(f"Design region size (nt): {len(junction.design_region)}")
-        logger.info(f"Okay regions (<left_start>,<left_length>,<right_start>,<right_length>): {ok_regions_list}")
-        logger.info(f"LEFT EXPLAIN ({junction.name}): {junction.primer3_designs["PRIMER_LEFT_EXPLAIN"]}")
-        logger.info(f"RIGHT EXPLAIN ({junction.name}): {junction.primer3_designs["PRIMER_RIGHT_EXPLAIN"]}")
-        logger.info(f"PAIR EXPLAIN ({junction.name}): {junction.primer3_designs["PRIMER_PAIR_EXPLAIN"]}")
-        logger.info(f"PRIMER_LEFT_RETURNED ({junction.name}): {junction.primer3_designs["PRIMER_LEFT_NUM_RETURNED"]}")
-        logger.info(f"PRIMER_RIGHT_RETURNED ({junction.name}): {junction.primer3_designs["PRIMER_RIGHT_NUM_RETURNED"]}")
-        logger.info(f"PRIMER_PAIR_RETURNED ({junction.name}): {junction.primer3_designs["PRIMER_PAIR_NUM_RETURNED"]}")
-
-        if junction.primer3_designs["PRIMER_PAIR_NUM_RETURNED"] == 0:
-            logger.warning(f"No suitable primer pairs found for junction: {junction.name}")
-            tm_range = f"Tm range: {panel.config['singleplex_design_parameters']['PRIMER_MIN_TM']} - {panel.config['singleplex_design_parameters']['PRIMER_MAX_TM']}"
-            logger.info(f"{tm_range}. Consider increasing the Tm range.")
-        elif junction.primer3_designs["PRIMER_PAIR_NUM_RETURNED"] < num_expected:
-            logger.warning(f"Fewer primer pairs found than desired: {num_expected}")
-
-        # Save design to file
-        if save_designs:
-            outfile = f"{junction.name}_primer3_out.json"
-            with open(outfile, 'w') as f:
-                json.dump(junction.primer3_designs, f, indent = 4)
-            logger.info(f"Saving primer3 designs to file: {outfile}")
-
-    return(panel)
-
-
 def calculate_single_primer_thermodynamics(primer_list, config, logger):
     """
     Function to calculate thermodynamic properties of a list of individual primers.
@@ -498,6 +372,7 @@ def calculate_single_primer_thermodynamics(primer_list, config, logger):
     primer_max_self_end = config['singleplex_design_parameters']['PRIMER_MAX_SELF_END_TH']
     primer_max_end_stability = config['singleplex_design_parameters']['PRIMER_MAX_END_STABILITY']
 
+    # TODO: Should this be a tuple?
     good_primers = []
 
     # Iterate over all primers in the list. Hard filters are ordered such that more common reasons for exclusion are first,
@@ -604,13 +479,13 @@ def calculate_single_primer_thermodynamics(primer_list, config, logger):
             primer_3prime_too_stable += 1
             continue
 
-        #print(f'{primers_considered} - Primer: {primer}')
-        #print(f'Primer Tm: {primer_tm}')
-        #print(f'Amount bound: {primer_bound}')
-        #print(f'PRIMER_MAX_SELF_ANY_TH: {round(PRIMER_SELF_ANY_TH,1)}')
-        #print(f'PRIMER_MAX_HAIRPIN_TH: {round(PRIMER_MAX_HAIRPIN_TH,1)}')
-        #print(f'PRIMER_MAX_SELF_END_TH: {round(PRIMER_WT_SELF_END_TH,1)}')
-        #print(f'PRIMER_MAX_END_STABILITY: {round(PRIMER_END_STABILITY,1)}')
+        #logger.info(f'{primers_considered} - Primer: {primer}')
+        #logger.info(f'Primer Tm: {primer_tm}')
+        #logger.info(f'Amount bound: {primer_bound}')
+        #logger.info(f'PRIMER_MAX_SELF_ANY_TH: {round(PRIMER_SELF_ANY_TH,1)}')
+        #logger.info(f'PRIMER_MAX_HAIRPIN_TH: {round(PRIMER_MAX_HAIRPIN_TH,1)}')
+        #logger.info(f'PRIMER_MAX_SELF_END_TH: {round(PRIMER_MAX_SELF_END_TH,1)}')
+        #logger.info(f'PRIMER_MAX_END_STABILITY: {round(PRIMER_END_STABILITY,1)}')
 
         # ==========================================================================================================
         # Now only "good" primers are left and we calculate the penalty for the primer
@@ -714,7 +589,7 @@ def calculate_single_primer_thermodynamics(primer_list, config, logger):
 
     logger.info(eval_string)
 
-    return(good_primers)
+    return(good_primers, eval_string)
 
 
 def calculate_single_primer_thermodynamics_parallel(left_kmers, right_kmers, config, logger):
@@ -724,95 +599,8 @@ def calculate_single_primer_thermodynamics_parallel(left_kmers, right_kmers, con
     # Use ProcessPoolExecutor for CPU-bound tasks
     with ProcessPoolExecutor(max_workers = max(2, multiprocessing.cpu_count() - 2)) as executor:
         # Submit both tasks
-        left_future = executor.submit(calculate_single_primer_thermodynamics, left_kmers, config, logger)
-        right_future = executor.submit(calculate_single_primer_thermodynamics, right_kmers, config), logger
+        left_future, left_eval_future = executor.submit(calculate_single_primer_thermodynamics, left_kmers, config, logger)
+        right_future, right_eval_future = executor.submit(calculate_single_primer_thermodynamics, right_kmers, config, logger)
     
     return left_future.result(), right_future.result()
-
-
-def choose_left_and_right_primers(panel_logger, parallel: bool = False):
-    """
-    A function that picks individual primers left and right of the provided junctions.
-
-    Args:
-        design_input_file - CSV file containing sample names and junctions. Must be provided by the user.
-        fasta_file - Genomic reference from which to extract design regions. Must be provided by the user.
-        config_file - JSON configuration file. Uses default file, unless provided by the user.
-        parallel - Boolean. Run the primer picker in parallel jobs for right and left primers. Default is False.
-    
-    Returns:
-        A MultiplexPanel object containing the left and right primer designs for each junction.
-    """
-    
-    # Pretty CLI interface
-    #display_welcome()
-
-    panel = panel_logger[1]
-    logger = panel_logger[0]
-
-    min_primer_length = panel.config['singleplex_design_parameters']['primer_min_length']
-    max_primer_length = panel.config['singleplex_design_parameters']['primer_max_length']
-    max_poly_X = panel.config['singleplex_design_parameters']['primer_max_poly_x']
-    max_N = panel.config['singleplex_design_parameters']['primer_max_n']
-
-    # Pick primers to left and right of each junction
-    for junction in panel.junctions:
-        logger.info("#=============================================================#")
-        logger.info(junction.name)
-
-        # Get the design regions left and right of the junction, respectively.
-        left_region = junction.design_region[1:junction.jmin_coordinate]
-
-        # TODO: Should the right region be reverse complemented here?
-        right_region = reverse_complement(junction.design_region[junction.jmax_coordinate:junction.junction_length])
-
-        # Check if design regions allow enough space to evaluate primers, expect around 50-60 bases for typical values of max_primer_length
-        # TODO this should probably be checked upstream when design regions are calculated.
-        if len(left_region) < 2 * max_primer_length:
-            logger.error("Left primer region less than 2x max_primer_length")
-            raise ValueError("Left primer region less than 2x max_primer_length")
-        if len(right_region) < 2 * max_primer_length:
-            logger.error("Right primer region less than 2x max_primer_length")
-            raise ValueError("Right primer region less than 2x max_primer_length")
-
-        # Generate k-mer solutions for left and right target regions (all possible sequences within min/max primer length)
-        left_kmers = generate_kmers(left_region, min_primer_length, max_primer_length)
-        right_kmers = generate_kmers(right_region, min_primer_length, max_primer_length)
-        logger.info(f'kmers to evaluate: Left: {len(left_kmers)}; Right: {len(right_kmers)}')
-
-        # Filter kmers based on basic sequence properties
-        left_kmers = filter_kmers(left_kmers, max_poly_X, max_N)
-        right_kmers = filter_kmers(right_kmers, max_poly_X, max_N)
-        logger.info(f'kmers after basic filtering: Left: {len(left_kmers)}; Right: {len(right_kmers)}')
-
-        # Warn or raise error if too few kmers found.
-        # TODO adjust the values and improve handling.
-        if len(left_kmers) < 100:
-            msg = "Fewer than 100 left kmers found."
-            logger.warning(msg)
-            warnings.warn(msg)
-        elif len(left_kmers) == 0:
-            logger.error("No left kmers found.")
-            raise ValueError("No left kmers found.")
-        if len(right_kmers) < 100:
-            logger.warning("Fewer than 100 right kmers found.") 
-            warnings.warn("Fewer than 100 right kmers found.") 
-        elif len(right_kmers) == 0:
-            logger.error("No right kmers found.")
-            raise ValueError("No right kmers found.")
-
-        if parallel:
-            # Run both left and right primers at the same time using 
-            left_primers, right_primers = calculate_single_primer_thermodynamics_parallel(left_kmers = left_kmers, right_kmers = right_kmers, config = panel.config, logger = logger)
-        else:
-            left_primers = calculate_single_primer_thermodynamics(left_kmers, panel.config, logger)
-            right_primers = calculate_single_primer_thermodynamics(right_kmers, panel.config, logger)
-            #print(left_primers)
-
-        junction.left_primer_table = left_primers
-        junction.right_primer_table = right_primers
-
-        logger.info(f'primers retained post theromdynamic alignment: Left: {len(left_primers)}, right {len(right_primers)}')
-
-    return(panel)
 

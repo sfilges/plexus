@@ -1,3 +1,11 @@
+# ================================================================================
+# Multiplexpanel classes and associated functions
+# 
+# Author: Stefan Filges (stefan@simsendiagnostics.com)
+# Copyright (c) 2025 Simsen Diagnostics AB
+# ================================================================================
+
+import os
 import json
 import uuid
 import pandas as pd
@@ -9,27 +17,25 @@ from multiplexdesigner.utils.utils import setup_logger
 from multiplexdesigner.utils.root_dir import ROOT_DIR
 
 
-# Initialise panel_logger object
-def panel_factory(name: str, genome: str, design_input_file: str, fasta_file: str, config_file: str = None, padding: int = 300):
+# ================================================================================
+# A class to hold primer designs and design metrics.
+# ================================================================================
+# TODO: This should be added to each Junction, containing the designed primers and design metrics.
+@dataclass
+class PrimerDesigns:
     """
-    Set up the logger, load the configuration, create and configure the panel,
-    and prepare it for primer design.
-    Returns a tuple: (logger, panel)
+    A class to hold primer designs and metrics.
     """
-    logger = setup_logger()
+    name: str
+    target: str
+    design_region: str = None
+    eval_string: str = None
+    primer_table: object = None
 
-    # Create and configure the multiplex panel object
-    panel = MultiplexPanel(name, genome)
-    panel.load_config(config_path=config_file, logger=logger)  # Handles default internally
 
-    # Retrieve design regions and calculate junctions
-    panel.import_junctions_csv(file_path=design_input_file, logger=logger)
-    panel.merge_close_junctions(logger=logger)
-    panel.extract_design_regions_from_fasta(fasta_file, logger=logger, padding=padding)
-    panel.calculate_junction_coordinates_in_design_region()
-
-    return logger, panel
-
+# ================================================================================
+# Define a single multiplex PCR target/junction
+# ================================================================================
 
 @dataclass
 class Junction:
@@ -39,39 +45,39 @@ class Junction:
     Args:
         - name: Name of of the junction provided by the user
         - chrom: chromosome of the junction. Must be in the same format as the reference genome
-        - five_prime: 5' coordinate of the junction
-        - three_prime: 3' coordinate of the junction
+        - start: 5' coordinate of the junction
+        - end: 3' coordinate of the junction
         - design region: Computed template sequence for primer design
         - design_start
         - design_end
         - junction_length
         - jmin_coordinate
         - jmax_coordinate
-        - primer3_designs: Output from primer3 (if run) in json format
-        - left_primer_table: 
-        - right_primer_table:
-        - left_primers:
-        - right_primers:
+        - primer_designs: PrimerDesigns object
     """
     name: str
     chrom: str
-    five_prime: int
-    three_prime: int
+    start: int
+    end: int
     design_region: str = None
     design_start: int = None
     design_end: int = None
     junction_length: int = None
     jmin_coordinate: int = None
     jmax_coordinate: int = None
-    primer3_designs: object = None
-    left_primer_table: object = None
-    right_primer_table: object = None
-    left_primers: list = None
-    right_primers: list = None
+    primer_designs: object = None
 
     def __repr__(self):
-        return f"Junction({self.name}, {self.chrom}:{self.five_prime}-{self.three_prime})"
+        return f"Junction({self.name}, {self.chrom}:{self.start}-{self.end})"
 
+    #TODO: Write method to print/save self.primer_designs.primer_table
+    def print_primer_designs(self):
+        return self.primer_designs.primer_table
+
+
+# ================================================================================
+# Main class for panel design
+# ================================================================================
 
 class MultiplexPanel:
     """Main class for managing multiplex PCR panel design"""
@@ -129,8 +135,8 @@ class MultiplexPanel:
             junction = Junction(
                 name=row['Name'],
                 chrom=row['Chrom'],
-                five_prime=int(row['Five_Prime_Coordinate']),
-                three_prime=int(row['Three_Prime_Coordinate'])
+                start=int(row['Five_Prime_Coordinate']),
+                end=int(row['Three_Prime_Coordinate'])
             )
             self.junctions.append(junction)
     
@@ -230,7 +236,7 @@ class MultiplexPanel:
         """Fallback method to merge junction objects directly"""
         # Sort junctions by chromosome and position
         sorted_junctions = sorted(self.junctions, 
-                                key=lambda x: (x.chrom, min(x.five_prime, x.three_prime)))
+                                key=lambda x: (x.chrom, min(x.start, x.end)))
         
         merged_junctions = []
         i = 0
@@ -249,8 +255,8 @@ class MultiplexPanel:
                     break
                 
                 # Calculate distance
-                current_end = max(current_junction.five_prime, current_junction.three_prime)
-                next_start = min(next_junction.five_prime, next_junction.three_prime)
+                current_end = max(current_junction.start, current_junction.end)
+                next_start = min(next_junction.start, next_junction.end)
                 distance = next_start - current_end
                 
                 if distance <= max_gap:
@@ -282,7 +288,7 @@ class MultiplexPanel:
         # Get min and max coordinates
         all_coords = []
         for j in junction_group:
-            all_coords.extend([j.five_prime, j.three_prime])
+            all_coords.extend([j.start, j.end])
         
         merged_five_prime = min(all_coords)
         merged_three_prime = max(all_coords)
@@ -310,8 +316,8 @@ class MultiplexPanel:
         for junction in self.junctions:
             try:
                 # Calculate design region coordinates
-                junction_start = min(junction.five_prime, junction.three_prime)
-                junction_end = max(junction.five_prime, junction.three_prime)
+                junction_start = min(junction.start, junction.end)
+                junction_end = max(junction.start, junction.end)
                 
                 design_start = junction_start - padding
                 design_end = junction_end + padding
@@ -366,8 +372,8 @@ class MultiplexPanel:
                 # design_start is 0-based genomic coordinate
                 
                 # Convert junction coordinates to 0-based relative to design region
-                junction_five_rel = junction.five_prime - junction.design_start - 1  # Convert to 0-based
-                junction_three_rel = junction.three_prime - junction.design_start - 1  # Convert to 0-based
+                junction_five_rel = junction.start - junction.design_start - 1  # Convert to 0-based
+                junction_three_rel = junction.end - junction.design_start - 1  # Convert to 0-based
                 
                 # Add padding around the junction region
                 jmin_coordinate = min(junction_five_rel, junction_three_rel) - padding
@@ -399,7 +405,7 @@ class MultiplexPanel:
                                          junction.design_region, junction.design_start]):
                 
                 print(f"\nJunction: {junction.name}")
-                print(f"Genomic coordinates: {junction.chrom}:{junction.five_prime}-{junction.three_prime}")
+                print(f"Genomic coordinates: {junction.chrom}:{junction.start}-{junction.end}")
                 print(f"Design region: {junction.chrom}:{junction.design_start}-{junction.design_end}")
                 print(f"Design region length: {junction.junction_length}")
                 print(f"Junction in design region: {junction.jmin_coordinate}-{junction.jmax_coordinate}")
@@ -414,14 +420,19 @@ class MultiplexPanel:
         print("\nCoordinate verification complete.")
     
     def create_junction_table(self) -> pd.DataFrame:
-        """Create pandas DataFrame with all junction information"""
+        """
+        Create pandas DataFrame with all junction information.
+
+        Args:
+            self: A MultiplexPanel object containing junctions.
+        """
         data = []
         for junction in self.junctions:
             row = {
                 'Name': junction.name,
                 'Chrom': junction.chrom,
-                'Five_Prime_Coordinate': junction.five_prime,
-                'Three_Prime_Coordinate': junction.three_prime,
+                'Five_Prime_Coordinate': junction.start,
+                'Three_Prime_Coordinate': junction.end,
                 'Design_Region': junction.design_region if junction.design_region else '',
                 'Design_Start': junction.design_start if junction.design_start else '',
                 'Design_End': junction.design_end if junction.design_end else '',
@@ -433,3 +444,84 @@ class MultiplexPanel:
         
         self.junction_df = pd.DataFrame(data)
         return self.junction_df
+
+    def write_junctions_to_csv(self, file_path: str, logger):
+        """
+        Write the junctions from the MultiplexPanel object to a CSV file.
+
+        Args:
+            file_path (str): Path to the output CSV file.
+            logger: Logger object for logging messages.
+
+        Raises:
+            ValueError: If no junctions are available or if the file path is invalid.
+            IOError: If there is an issue writing to the file.
+        """
+        # Check if there are any junctions to write
+        if not hasattr(self, 'junctions') or not self.junctions:
+            error_msg = "No junctions available to write to CSV."
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        # Create a DataFrame with all junction information
+        try:
+            junction_df = self.create_junction_table()
+        except Exception as e:
+            error_msg = f"Failed to create junction table: {e}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+
+        # Check if the DataFrame is empty
+        if junction_df.empty:
+            error_msg = "No junction data available to write to CSV."
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        # Check if the file path is valid
+        if not file_path:
+            error_msg = "File path cannot be empty."
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        # Ensure the directory exists
+        dir_path = os.path.dirname(file_path)
+        if dir_path and not os.path.exists(dir_path):
+            error_msg = f"Directory does not exist: {dir_path}"
+            logger.error(error_msg)
+            raise IOError(error_msg)
+
+        # Write the DataFrame to a CSV file
+        try:
+            junction_df.to_csv(file_path, index=False)
+            info_msg = f"Junctions successfully written to {file_path}"
+            logger.info(info_msg)
+            print(info_msg)
+        except Exception as e:
+            error_msg = f"Failed to write junctions to {file_path}: {e}"
+            logger.error(error_msg)
+            raise IOError(error_msg)
+
+
+# Initialise panel_logger object
+def panel_factory(name: str, genome: str, design_input_file: str, fasta_file: str, config_file: str = None, padding: int = 300):
+    """
+    Set up the logger, load the configuration, create and configure the panel,
+    and prepare it for primer design.
+    Returns a tuple: (logger, panel)
+    """
+    logger = setup_logger()
+
+    # Create and configure the multiplex panel object
+    panel = MultiplexPanel(name, genome)
+    panel.load_config(config_path=config_file, logger=logger)  # Handles default internally
+
+    # Retrieve design regions and calculate junctions
+    panel.import_junctions_csv(file_path=design_input_file, logger=logger)
+    panel.merge_close_junctions(logger=logger)
+    panel.extract_design_regions_from_fasta(fasta_file, logger=logger, padding=padding)
+    panel.calculate_junction_coordinates_in_design_region()
+
+    return logger, panel
+
+
+

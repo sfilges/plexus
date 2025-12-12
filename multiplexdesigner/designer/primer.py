@@ -1,6 +1,71 @@
+# ================================================================================
+# Primer classes and associated functions
+# 
+# Author: Stefan Filges (stefan@simsendiagnostics.com)
+# Copyright (c) 2025 Simsen Diagnostics AB
+# ================================================================================
+
 from dataclasses import dataclass, field
-from multiplexdesigner.designer.primer3_port import seqtm
+from multiplexdesigner.designer.thal import seqtm
 from multiplexdesigner.utils.utils import gc_content, create_primer_dataframe
+
+@dataclass
+class Primer:
+    """
+    Define a single primer.
+    """
+    name: str
+    seq: str
+    direction: str
+    start: int
+    length: int
+    bound: float
+    tm: float
+    tm_primer3: float = None
+    gc: float = None
+    penalty: float = None
+    self_any_th: float = None
+    self_end_th: float = None
+    hairpin_th: float = None
+    end_stability: float = None
+    engine: str = None
+    
+    def add_tail(self, tail_seq: str, tail_direction: str = "five_prime"):
+        """
+        Add tail sequence to primer.
+        """
+        if tail_direction == "five_prime":
+            self.seq = f"{tail_seq}{self.seq}"
+        elif tail_direction == "three_prime":
+            self.seq = f"{self.seq}{tail_seq}"
+
+
+@dataclass
+class PrimerPair:
+    """
+    Define a pair of primers.
+    """
+    forward: Primer
+    reverse: Primer
+    product_length: int
+    pair_id: str = field(default="", repr=False)
+
+
+@dataclass
+class Primer3:
+    """Class to represent primer3 output"""
+    panel_name: str
+    junction_name: str
+    chrom: str
+    five_prime: int
+    three_prime: int
+    design_region: str = None
+    design_start: int = None
+    design_end: int = None
+    primer_pairs_table: object = None
+    left_primer_table: object = None
+    right_primer_table: object = None
+
 
 # TODO: import primer pairs from primer3 output. Wouldn't it be better to design forward and reverse primers
 # separately instead of in pairs, and only consider pairing while also checking for primer dimers?
@@ -44,42 +109,6 @@ def load_primer_pairs_from_primer3_output(primer3_output, add_target=None):
     return primer_pairs
 
 
-@dataclass
-class Primer:
-    """
-    Define a single primer.
-    """
-    name: str
-    seq: str
-    direction: str
-    start: int
-    length: int
-    tm_primer3: float
-    tm: float
-    bound: float
-    gc: float
-    
-    def add_tail(self, tail_seq: str, tail_direction: str = "five_prime"):
-        """
-        Add tail sequence to primer.
-        """
-        if tail_direction == "five_prime":
-            self.seq = f"{tail_seq}{self.seq}"
-        elif tail_direction == "three_prime":
-            self.seq = f"{self.seq}{tail_seq}"
-
-
-@dataclass
-class PrimerPair:
-    """
-    Define a pair of primers.
-    """
-    forward: Primer
-    reverse: Primer
-    product_length: int
-    pair_id: str = field(default="", repr=False)
-
-
 def get_primer_dict(junction):
     """
     Extract unique primer pairs from a junction.
@@ -113,7 +142,8 @@ def get_primer_dict(junction):
                 tm_primer3 = round(row['left_tm'], 2),
                 tm = round(left_tm_bound.Tm, 2),
                 bound = round(left_tm_bound.bound, 2),
-                gc = round(gc_content(left_seq), 2)
+                gc = round(gc_content(left_seq), 2),
+                penalty = row['left_penalty']
             )
             primer_dict[left_key] = left_primer
 
@@ -132,25 +162,9 @@ def get_primer_dict(junction):
                 tm_primer3 = round(row['right_tm'], 2),
                 tm = round(right_tm_bound.Tm, 2),
                 bound = round(right_tm_bound.bound, 2),
-                gc = round(gc_content(right_seq), 2)
+                gc = round(gc_content(right_seq), 2),
+                penalty = row['right_penalty']
             )
             primer_dict[right_key] = right_primer
 
     return primer_dict
-
-
-@dataclass
-class Primer3:
-    """Class to represent primer3 output"""
-    panel_name: str
-    junction_name: str
-    chrom: str
-    five_prime: int
-    three_prime: int
-    design_region: str = None
-    design_start: int = None
-    design_end: int = None
-    primer_pairs_table: object = None
-    left_primer_table: object = None
-    right_primer_table: object = None
-
