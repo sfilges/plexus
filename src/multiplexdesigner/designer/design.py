@@ -12,7 +12,11 @@ import warnings
 import primer3
 from loguru import logger
 
-from multiplexdesigner.designer.multiplexpanel import MultiplexPanel, PrimerDesigns
+from multiplexdesigner.designer.multiplexpanel import (
+    MultiplexPanel,
+    PrimerDesigns,
+    panel_factory,
+)
 from multiplexdesigner.designer.thal import (
     calculate_single_primer_thermodynamics,
     calculate_single_primer_thermodynamics_parallel,
@@ -465,3 +469,38 @@ def primer3_design_primers(panel: MultiplexPanel) -> MultiplexPanel:
     Run primer3 locally (not implemented)
     """
     raise NotImplementedError("Local primer3 execution not yet implemented")
+
+
+# ================================================================================
+# Main Execution Logic
+# ================================================================================
+
+try:
+    from multiplexdesigner.utils.pretty_cli import display_welcome
+except ImportError:
+    try:
+        from multiplexdesigner.cli import display_welcome
+    except ImportError:
+
+        def display_welcome():
+            pass
+
+
+def run_designer(
+    design_input_file: str = "./data/junctions.csv",
+    fasta_file: str = "/Users/ctosimsen/Documents/hg38/hg38.fa",
+):
+    display_welcome()
+
+    panel = design_primers(
+        panel=panel_factory(
+            name="test_panel",
+            genome="hg38",
+            design_input_file=design_input_file,
+            fasta_file=fasta_file,
+            padding=200,
+        ),
+        method="simsen",
+    )
+
+    return panel

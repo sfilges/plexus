@@ -65,6 +65,8 @@ class PrimerPair:
     amplicon_length: int
     pair_penalty: float = None
     pair_id: str = field(default="", repr=False)
+    specificity_checked: bool = False
+    off_target_products: list = field(default_factory=list)
 
     @staticmethod
     def calculate_primer_pair_penalty_th(

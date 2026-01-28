@@ -707,6 +707,101 @@ class MultiplexPanel:
             logger.error(error_msg)
             raise OSError(error_msg) from e
 
+    def aggregate_primers(self) -> dict:
+        """
+        Collect all unique primers from all primer pairs in the panel.
+
+        Returns:
+            dict: A dictionary mapping primer sequences to a list of primer names (or IDs).
+                  Also creates a simplified mapping of sequence -> synthetic ID (SEQ_0, SEQ_1, ...)
+                  stored in self.unique_primer_map for downstream use.
+        """
+        seq_to_names = {}
+        count_pairs = 0
+
+        for junction in self.junctions:
+            if not junction.primer_pairs:
+                continue
+            for pair in junction.primer_pairs:
+                count_pairs += 1
+                # Forward
+                if pair.forward.seq not in seq_to_names:
+                    seq_to_names[pair.forward.seq] = []
+                seq_to_names[pair.forward.seq].append(pair.forward.name)
+
+                # Reverse
+                if pair.reverse.seq not in seq_to_names:
+                    seq_to_names[pair.reverse.seq] = []
+                seq_to_names[pair.reverse.seq].append(pair.reverse.name)
+
+        logger.info(
+            f"Aggregated {len(seq_to_names)} unique primer sequences from {count_pairs} candidate pairs."
+        )
+
+        # Create a stable synthetic ID map for these unique sequences
+        self.unique_primer_map = {}
+        for i, seq in enumerate(sorted(seq_to_names.keys())):
+            self.unique_primer_map[seq] = f"SEQ_{i}"
+
+        return seq_to_names
+
+    def save_candidate_primers_to_fasta(self, file_path: str):
+        """
+        Save all unique candidate primers to a FASTA file.
+        Uses synthetic IDs (SEQ_0, SEQ_1, ...) to avoid duplicates.
+
+        Args:
+            file_path: Path to the output FASTA file.
+        """
+        if not hasattr(self, "unique_primer_map") or not self.unique_primer_map:
+            self.aggregate_primers()
+
+        try:
+            with open(file_path, "w") as f:
+                for seq, uid in self.unique_primer_map.items():
+                    f.write(f">{uid}\n{seq}\n")
+            logger.info(f"Saved unique primers to {file_path}")
+        except Exception as e:
+            logger.error(f"Failed to save primers to FASTA: {e}")
+            raise
+
+    def save_candidate_pairs_to_csv(self, file_path: str):
+        """
+        Save all candidate primer pairs to a CSV file.
+
+        Args:
+            file_path: Path to the output CSV file.
+        """
+        data = []
+        for junction in self.junctions:
+            if not junction.primer_pairs:
+                continue
+            for pair in junction.primer_pairs:
+                row = {
+                    "Junction": junction.name,
+                    "Pair_ID": pair.pair_id,
+                    "Forward_Name": pair.forward.name,
+                    "Reverse_Name": pair.reverse.name,
+                    "Forward_Seq": pair.forward.seq,
+                    "Reverse_Seq": pair.reverse.seq,
+                    "Amplicon_Length": pair.amplicon_length,
+                    "Penalty": pair.pair_penalty,
+                    "Insert_Size": pair.insert_size,
+                }
+                data.append(row)
+
+        if not data:
+            logger.warning("No candidate pairs to save.")
+            return
+
+        try:
+            df = pd.DataFrame(data)
+            df.to_csv(file_path, index=False)
+            logger.info(f"Saved {len(df)} candidate pairs to {file_path}")
+        except Exception as e:
+            logger.error(f"Failed to save pairs to CSV: {e}")
+            raise
+
 
 def panel_factory(
     name: str,
