@@ -58,7 +58,7 @@ def design(
     input_file: Annotated[
         Path,
         typer.Option(
-            "--input",
+            "--input-junctions",
             "-i",
             help="Path to the input CSV file containing junctions.",
         ),

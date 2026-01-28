@@ -1,17 +1,16 @@
 # multiplexDesigner
 
-
-# Install
+## Install
 
 Get the source code from GitHub:
 
-```
+```bash
 git clone https://github.com/sfilges/multiplexDesigner
 ```
 
 Then, install the software dependencies using conda:
 
-```
+```bash
 cd multiplexDesigner
 conda update conda
 conda env create -f environment.yml
@@ -20,13 +19,13 @@ conda activate multiplexdesigner-run
 
 Finally, install `MultiplexDesigner` itself with pip:
 
-```
+```bash
 pip install -e .
 ```
 
 Test installation by running:
 
-```
+```bash
 multiplexdesigner
 ```
 
@@ -62,10 +61,10 @@ chr7:55181178-55181578.
 Now search the provided reference genome (fasta file) and extract the genomic sequence for each junction. Append the
 sequence to the junction table as the Design_Region, for example:
 
-´´´
+```csv
 Name,Chrom,Five_Prime_Coordinate,Three_Prime_Coordinate,Design_Region
 EGFR_T790M,chr7,55181378,55181378,CCAAACTCAGAGATCAGGTGACTCCGACTCCTCCTTTATCCAATGTGCTCCTCATGGCCACTGTTGCCTGGGCCTCTCTGTCATGGGGAATCCCCAGATGCACCCAGGAGGGGCCCTCTCCCACTGCATCTGTCACTTCACAGCCCTGCGTAAACGTCCCTGTGCTAGGTCTTTTGCAGGCACAGCTTTTCCTCCATGAGTACGTATTTTGAAACTCAAGATCGCATTCATGCGTCTTCACCTGGAAGGGGTCCATGTGCCCCTCCTTCTGGCCACCATGCGAAGCCACACTGACGTGCCTCTCCCTCCCTCCAGGAAGCCTACGTGATGGCCAGCGTGGACAACCCCCACGTGTGCCGCCTGCTGGGCATCTGCCTCACCTCCACCGTGCAGCTCATCACGCAGCTCATGCCCTTCGGCTGCCTCCTGGACTATGTCCGGGAACACAAAGACAATATTGGCTCCCAGTACCTGCTCAACTGGTGTGTGCAGATCGCAAAGGTAATCAGGGAAGGGAGATACGGGGAGGGGAGATAAGGAGCCAGGATCCTCACATGCGGTCTGCGCTCCTGGGATAGCAAGAGTTTGCCATGGGGATATGTGTGTGCGTGCATGCAGCACACACACATTCCTTTATTTTGGATTCAATCAAGTTGATCTTCTTGTGCACAAATCAGTGCCTGTCCCATCTGCATGTGGAAACTCTCATCAATCAGCTACCTTTGAAGAATTTTCTCTTTATTGAGTGCTCAGTGTGGTCTGATGTCTCTGTTCTTATTTCTCTGGAATTCTTTGTGAATA
-´´´
+```
 
 Now we need to calculate the sequence target (junction) within the coordinates of the Design_Region. For example for the Desing_Regio, chr12:25245148-25245550 and junction KRAS_G12D_KRAS_G13R,chr12,25245348,25245350 the position of the junction is calculated as follows (including two bp padding on either side)
 

@@ -17,6 +17,7 @@ from loguru import logger
 
 from multiplexdesigner.designer.primer import PrimerPair
 from multiplexdesigner.utils.root_dir import ROOT_DIR
+from multiplexdesigner.utils.utils import write_fasta_from_dict
 
 # ================================================================================
 # A class to hold primer designs and design metrics.
@@ -757,9 +758,9 @@ class MultiplexPanel:
             self.aggregate_primers()
 
         try:
-            with open(file_path, "w") as f:
-                for seq, uid in self.unique_primer_map.items():
-                    f.write(f">{uid}\n{seq}\n")
+            # Invert map: unique_primer_map is {seq: id}, but write_fasta_from_dict expects {id: seq}
+            id_to_seq = {uid: seq for seq, uid in self.unique_primer_map.items()}
+            write_fasta_from_dict(id_to_seq, file_path)
             logger.info(f"Saved unique primers to {file_path}")
         except Exception as e:
             logger.error(f"Failed to save primers to FASTA: {e}")
