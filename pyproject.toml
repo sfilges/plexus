@@ -22,7 +22,6 @@ classifiers = [
 ]
 dependencies = [
     "biopython",
-    "ispcr",
     "loguru",
     "pandas",
     "primer3-py",
@@ -30,7 +29,6 @@ dependencies = [
     "pysam",
     "rich",
     "typer",
-    "multiply @ git+https://github.com/JasonAHendry/multiply.git",
 ]
 
 [project.scripts]

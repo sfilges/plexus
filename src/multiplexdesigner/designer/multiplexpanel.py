@@ -13,11 +13,26 @@ from datetime import datetime
 import pandas as pd
 from Bio import SeqIO
 from loguru import logger
+from pydantic import BaseModel, Field, ValidationError
 
 from multiplexdesigner.aligner import PrimerDimerPredictor
 from multiplexdesigner.config import DesignerConfig, load_config
 from multiplexdesigner.designer.primer import PrimerPair
 from multiplexdesigner.utils.utils import write_fasta_from_dict
+
+# ================================================================================
+# Pydantic models for input validation
+# ================================================================================
+
+
+class JunctionInput(BaseModel):
+    """Schema for validating junction input from CSV."""
+
+    name: str = Field(alias="Name")
+    chrom: str = Field(alias="Chrom")
+    five_prime: int = Field(alias="Five_Prime_Coordinate")
+    three_prime: int = Field(alias="Three_Prime_Coordinate")
+
 
 # ================================================================================
 # A class to hold primer designs and design metrics.
@@ -253,19 +268,9 @@ class MultiplexPanel:
         )
 
     def import_junctions_csv(self, file_path: str):
-        """Import junctions from CSV file using pandas"""
+        """Import junctions from CSV file using pandas and validate with Pydantic"""
         try:
             df = pd.read_csv(file_path)
-            required_cols = [
-                "Name",
-                "Chrom",
-                "Five_Prime_Coordinate",
-                "Three_Prime_Coordinate",
-            ]
-
-            if not all(col in df.columns for col in required_cols):
-                raise ValueError(f"CSV must contain columns: {required_cols}")
-
             self.junction_df = df.copy()
             self._create_junction_objects_from_df()
             logger.info(
@@ -277,16 +282,23 @@ class MultiplexPanel:
             raise
 
     def _create_junction_objects_from_df(self):
-        """Create Junction objects from DataFrame"""
+        """Create Junction objects from DataFrame using Pydantic validation"""
         self.junctions = []
-        for _, row in self.junction_df.iterrows():
-            junction = Junction(
-                name=row["Name"],
-                chrom=row["Chrom"],
-                start=int(row["Five_Prime_Coordinate"]),
-                end=int(row["Three_Prime_Coordinate"]),
-            )
-            self.junctions.append(junction)
+        for i, row in self.junction_df.iterrows():
+            try:
+                # Validate row using Pydantic
+                j_input = JunctionInput(**row.to_dict())
+
+                junction = Junction(
+                    name=j_input.name,
+                    chrom=j_input.chrom,
+                    start=j_input.five_prime,
+                    end=j_input.three_prime,
+                )
+                self.junctions.append(junction)
+            except ValidationError as e:
+                logger.error(f"Invalid junction data at row {i}: {e}")
+                raise ValueError(f"Invalid junction data at row {i}") from e
 
     def merge_close_junctions(self):
         """Merge junctions that are close together based on max_amplicon_gap from config"""
