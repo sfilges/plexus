@@ -5,13 +5,14 @@
 # Copyright (c) 2025 Simsen Diagnostics AB
 # ================================================================================
 
+import json
 import os
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
 import pandas as pd
-from Bio import SeqIO
+import pysam
 from loguru import logger
 from pydantic import BaseModel, Field, ValidationError
 
@@ -469,6 +470,8 @@ class MultiplexPanel:
         """
         Extract genomic sequences for design regions with padding from FASTA file.
 
+        Uses pysam for indexed random access (requires .fai index).
+
         Args:
             fasta_file: Path to the FASTA file
             padding: Number of bases to pad on each side of the junction
@@ -481,43 +484,31 @@ class MultiplexPanel:
         )
 
         regions_extracted = 0
-        for junction in self.junctions:
-            try:
-                # Calculate design region coordinates
-                junction_start = min(junction.start, junction.end)
-                junction_end = max(junction.start, junction.end)
+        with pysam.FastaFile(fasta_file) as fasta:
+            for junction in self.junctions:
+                try:
+                    # Calculate design region coordinates
+                    junction_start = min(junction.start, junction.end)
+                    junction_end = max(junction.start, junction.end)
 
-                design_start = junction_start - padding
-                design_end = junction_end + padding
+                    design_start = junction_start - padding
+                    design_end = junction_end + padding
 
-                # Find matching chromosome in genome
-                design_sequence = self.seqio_extract_genomic_sequence(
-                    fasta_file, junction.chrom, design_start, design_end
-                )
+                    # pysam uses 0-based half-open coordinates
+                    design_sequence = fasta.fetch(
+                        junction.chrom, design_start - 1, design_end
+                    )
 
-                # Store in junction object
-                junction.design_region = design_sequence.upper()
-                junction.design_start = design_start
-                junction.design_end = design_end
-                regions_extracted += 1
+                    # Store in junction object
+                    junction.design_region = design_sequence.upper()
+                    junction.design_start = design_start
+                    junction.design_end = design_end
+                    regions_extracted += 1
 
-            except Exception as e:
-                logger.error(f"Error extracting region for {junction.name}: {e}")
+                except Exception as e:
+                    logger.error(f"Error extracting region for {junction.name}: {e}")
 
         logger.info(f"Successfully extracted {regions_extracted} design regions")
-
-    def seqio_extract_genomic_sequence(
-        self, fasta_file, sequence_id, start, end, strand="+"
-    ):
-        """Memory-efficient extraction for large files."""
-        with open(fasta_file) as handle:
-            for record in SeqIO.parse(handle, "fasta"):
-                if record.id == sequence_id:
-                    seq = record.seq[start - 1 : end]
-                    if strand == "-":
-                        seq = seq.reverse_complement()
-                    return str(seq)
-        raise ValueError(f"Sequence ID '{sequence_id}' not found")
 
     def calculate_junction_coordinates_in_design_region(self):
         """Calculate junction coordinates within design regions with proper logic"""
@@ -762,6 +753,34 @@ class MultiplexPanel:
             logger.error(f"Failed to save primers to FASTA: {e}")
             raise
 
+    def build_pair_lookup(self) -> dict:
+        """Build a mapping of pair_id -> PrimerPair for all pairs in the panel.
+
+        Returns:
+            dict mapping pair_id strings to PrimerPair objects.
+        """
+        lookup = {}
+        for junction in self.junctions:
+            if not junction.primer_pairs:
+                continue
+            for pair in junction.primer_pairs:
+                lookup[pair.pair_id] = pair
+        return lookup
+
+    def build_selector_dataframe(self) -> pd.DataFrame:
+        """Build a DataFrame suitable for the multiplex selector.
+
+        Returns:
+            DataFrame with columns ``target_id`` and ``pair_name``.
+        """
+        rows = []
+        for junction in self.junctions:
+            if not junction.primer_pairs:
+                continue
+            for pair in junction.primer_pairs:
+                rows.append({"target_id": junction.name, "pair_name": pair.pair_id})
+        return pd.DataFrame(rows)
+
     def save_candidate_pairs_to_csv(self, file_path: str):
         """
         Save all candidate primer pairs to a CSV file.
@@ -784,6 +803,10 @@ class MultiplexPanel:
                     "Amplicon_Length": pair.amplicon_length,
                     "Penalty": pair.pair_penalty,
                     "Insert_Size": pair.insert_size,
+                    "Dimer_Score": pair.dimer_score,
+                    "Off_Target_Count": len(pair.off_target_products),
+                    "Specificity_Checked": pair.specificity_checked,
+                    "Selected": pair.selected,
                 }
                 data.append(row)
 
@@ -798,6 +821,188 @@ class MultiplexPanel:
         except Exception as e:
             logger.error(f"Failed to save pairs to CSV: {e}")
             raise
+
+    def _build_enriched_pair_row(self, junction: Junction, pair: PrimerPair) -> dict:
+        """Build a dict with comprehensive primer pair data including genomic coords.
+
+        Shared by save_selected_multiplex_csv and save_top_panels_csv.
+        """
+        design_start = junction.design_start or 0
+
+        return {
+            "Junction": junction.name,
+            "Chrom": junction.chrom,
+            "Junction_Start": junction.start,
+            "Junction_End": junction.end,
+            "Pair_ID": pair.pair_id,
+            "Forward_Seq": pair.forward.seq,
+            "Reverse_Seq": pair.reverse.seq,
+            "Forward_Tm": pair.forward.tm,
+            "Reverse_Tm": pair.reverse.tm,
+            "Tm_Diff": round(abs((pair.forward.tm or 0) - (pair.reverse.tm or 0)), 2),
+            "Forward_Bound": pair.forward.bound,
+            "Reverse_Bound": pair.reverse.bound,
+            "Forward_GC": pair.forward.gc,
+            "Reverse_GC": pair.reverse.gc,
+            "Forward_Length": pair.forward.length,
+            "Reverse_Length": pair.reverse.length,
+            "Forward_Genomic_Start": design_start + pair.forward.start,
+            "Forward_Genomic_End": design_start
+            + pair.forward.start
+            + pair.forward.length,
+            "Reverse_Genomic_Start": design_start + pair.reverse.start,
+            "Reverse_Genomic_End": design_start
+            + pair.reverse.start
+            + pair.reverse.length,
+            "Amplicon_Length": pair.amplicon_length,
+            "Insert_Size": pair.insert_size,
+            "Pair_Penalty": pair.pair_penalty,
+            "Dimer_Score": pair.dimer_score,
+            "Off_Target_Count": len(pair.off_target_products),
+            "Specificity_Checked": pair.specificity_checked,
+        }
+
+    def _junction_for_pair(self, pair: PrimerPair) -> Junction | None:
+        """Find the junction that owns a given primer pair."""
+        for junction in self.junctions:
+            if not junction.primer_pairs:
+                continue
+            for p in junction.primer_pairs:
+                if p.pair_id == pair.pair_id:
+                    return junction
+        return None
+
+    def save_selected_multiplex_csv(self, file_path: str, selected_pairs: list) -> None:
+        """Save the best multiplex solution to CSV with full primer details.
+
+        Args:
+            file_path: Output CSV path.
+            selected_pairs: List of selected PrimerPair objects (one per junction).
+        """
+        if not selected_pairs:
+            logger.warning("No selected pairs to save.")
+            return
+
+        data = []
+        for pair in selected_pairs:
+            junction = self._junction_for_pair(pair)
+            if junction is None:
+                logger.warning(f"Could not find junction for pair {pair.pair_id}")
+                continue
+            data.append(self._build_enriched_pair_row(junction, pair))
+
+        df = pd.DataFrame(data)
+        df.to_csv(file_path, index=False)
+        logger.info(f"Saved selected multiplex ({len(df)} pairs) to {file_path}")
+
+    def save_top_panels_csv(self, file_path: str, solutions: list) -> None:
+        """Save top N multiplex solutions to CSV.
+
+        Args:
+            file_path: Output CSV path.
+            solutions: List of Multiplex objects, sorted by cost (best first).
+        """
+        if not solutions:
+            logger.warning("No multiplex solutions to save.")
+            return
+
+        pair_lookup = self.build_pair_lookup()
+        data = []
+
+        for rank, solution in enumerate(solutions, start=1):
+            for pair_id in solution.primer_pairs:
+                pair = pair_lookup.get(pair_id)
+                if pair is None:
+                    continue
+                junction = self._junction_for_pair(pair)
+                if junction is None:
+                    continue
+                row = self._build_enriched_pair_row(junction, pair)
+                row["Solution_Rank"] = rank
+                row["Solution_Cost"] = round(solution.cost, 4)
+                data.append(row)
+
+        df = pd.DataFrame(data)
+        df.to_csv(file_path, index=False)
+        logger.info(
+            f"Saved {len(solutions)} panel solutions ({len(df)} rows) to {file_path}"
+        )
+
+    def save_off_targets_csv(self, file_path: str, selected_pairs: list) -> None:
+        """Save detailed off-target products for selected pairs.
+
+        Args:
+            file_path: Output CSV path.
+            selected_pairs: List of selected PrimerPair objects.
+        """
+        data = []
+        for pair in selected_pairs:
+            junction = self._junction_for_pair(pair)
+            junction_name = junction.name if junction else ""
+            for prod in pair.off_target_products:
+                data.append(
+                    {
+                        "Pair_ID": pair.pair_id,
+                        "Junction": junction_name,
+                        "OT_Chrom": prod.get("chrom", ""),
+                        "OT_F_Primer": prod.get("F_primer", ""),
+                        "OT_R_Primer": prod.get("R_primer", ""),
+                        "OT_Product_Size": prod.get("product_bp", ""),
+                        "OT_F_Start": prod.get("F_start", ""),
+                        "OT_R_Start": prod.get("R_start", ""),
+                    }
+                )
+
+        if not data:
+            logger.info("No off-target products found for selected pairs.")
+            # Write empty file with headers
+            pd.DataFrame(
+                columns=[
+                    "Pair_ID",
+                    "Junction",
+                    "OT_Chrom",
+                    "OT_F_Primer",
+                    "OT_R_Primer",
+                    "OT_Product_Size",
+                    "OT_F_Start",
+                    "OT_R_Start",
+                ]
+            ).to_csv(file_path, index=False)
+            return
+
+        df = pd.DataFrame(data)
+        df.to_csv(file_path, index=False)
+        logger.info(f"Saved {len(df)} off-target products to {file_path}")
+
+    def save_panel_summary_json(self, file_path: str, pipeline_result) -> None:
+        """Save panel metadata and summary to JSON.
+
+        Args:
+            file_path: Output JSON path.
+            pipeline_result: PipelineResult object with solutions and config.
+        """
+        total_pairs = sum(len(j.primer_pairs) for j in self.junctions if j.primer_pairs)
+
+        summary = {
+            "panel_name": self.panel_name,
+            "genome": self.genome,
+            "date": self.date,
+            "panel_uuid": self.panel_uuid,
+            "num_junctions": len(self.junctions),
+            "num_candidate_pairs": total_pairs,
+            "num_selected_pairs": len(pipeline_result.selected_pairs),
+            "best_multiplex_cost": round(pipeline_result.multiplex_solutions[0].cost, 4)
+            if pipeline_result.multiplex_solutions
+            else None,
+            "num_solutions_evaluated": pipeline_result.config.multiplex_picker_parameters.initial_solutions,
+            "steps_completed": pipeline_result.steps_completed,
+            "errors": pipeline_result.errors,
+            "config": pipeline_result.config.model_dump(),
+        }
+
+        with open(file_path, "w") as f:
+            json.dump(summary, f, indent=2, default=str)
+        logger.info(f"Saved panel summary to {file_path}")
 
 
 def panel_factory(

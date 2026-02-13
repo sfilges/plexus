@@ -111,8 +111,10 @@ class AmpliconFinder:
             self.amplicon_df.shape[1],
             "F_expected",
             self.amplicon_df.apply(
-                lambda r: Position(chrom=r["chrom"], start=r["F_start"])
-                == expected_dt[r["F_primer"]],
+                lambda r: (
+                    Position(chrom=r["chrom"], start=r["F_start"])
+                    == expected_dt[r["F_primer"]]
+                ),
                 axis=1,
             ),
         )
@@ -120,8 +122,10 @@ class AmpliconFinder:
             self.amplicon_df.shape[1],
             "R_expected",
             self.amplicon_df.apply(
-                lambda r: Position(chrom=r["chrom"], start=r["R_start"])
-                == expected_dt[r["R_primer"]],
+                lambda r: (
+                    Position(chrom=r["chrom"], start=r["R_start"])
+                    == expected_dt[r["R_primer"]]
+                ),
                 axis=1,
             ),
         )

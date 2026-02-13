@@ -68,6 +68,7 @@ class PrimerPair:
     specificity_checked: bool = False
     off_target_products: list = field(default_factory=list)
     dimer_score: float = None
+    selected: bool = False
 
     @staticmethod
     def calculate_primer_pair_penalty_th(

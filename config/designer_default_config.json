@@ -1,15 +1,15 @@
 {
     "singleplex_design_parameters" : {
         "PRIMER_NUM_RETURN": 10,
-        "PRIMER_OPT_TM": 68.0,
-        "PRIMER_MIN_TM": 60.0,
-        "PRIMER_MAX_TM": 75.0,
+        "PRIMER_OPT_TM": 60.0,
+        "PRIMER_MIN_TM": 57.0,
+        "PRIMER_MAX_TM": 63.0,
         "PRIMER_OPT_SIZE": 22,
         "primer_min_length": 15,
         "primer_max_length": 30,
         "PRIMER_OPT_BOUND": 98.0,
-        "PRIMER_MIN_BOUND": 95.0,
-        "PRIMER_MAX_BOUND": 100.0,
+        "PRIMER_MIN_BOUND": -10.0,
+        "PRIMER_MAX_BOUND": 120.0,
         "junction_padding_bases": 3,
         "5_primer_tail": "GGACACTCTTTCCCTACACGACGCTCTTCCGATCTAAAAAAAAAAAAAAAAAAAATGGGAAAGAGTGTCC",
         "3_prime_tail": "GTGACTGGAGTTCAGACGTGTGCTCTTCCGATCT",
@@ -35,10 +35,10 @@
         "PRIMER_WT_BOUND_LT": 1.0,
         "PRIMER_WT_GC_PERCENT_GT": 0.0,
         "PRIMER_WT_GC_PERCENT_LT": 0.0,
-        "PRIMER_WT_SELF_ANY_TH": 0.0,
-        "PRIMER_WT_SELF_END_TH": 0.0,
-        "PRIMER_WT_HAIRPIN_TH": 0.0,
-        "PRIMER_WT_END_STABILITY": 0.0
+        "PRIMER_WT_SELF_ANY_TH": 1.0,
+        "PRIMER_WT_SELF_END_TH": 1.0,
+        "PRIMER_WT_HAIRPIN_TH": 1.0,
+        "PRIMER_WT_END_STABILITY": 1.0
     },
     "primer_pair_parameters" : {
         "PRIMER_PAIR_MAX_DIFF_TM": 3.0,
@@ -74,6 +74,9 @@
         "plexity_wt_gt": 1.0,
         "force_plexity": false,
         "allow_split_panel": false,
-        "max_splits": 2
+        "max_splits": 2,
+        "wt_pair_penalty": 1.0,
+        "wt_off_target": 5.0,
+        "wt_cross_dimer": 1.0
     }
 }

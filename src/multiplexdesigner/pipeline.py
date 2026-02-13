@@ -5,7 +5,8 @@
 #   1. Load configuration and create panel
 #   2. Design primers for each junction
 #   3. Check specificity via BLAST (optional)
-#   4. Save outputs
+#   4. Multiplex optimization — select best primer combination
+#   5. Save outputs
 #
 # Author: Stefan Filges (stefan@simsendiagnostics.com)
 # Copyright (c) 2025 Simsen Diagnostics AB
@@ -22,6 +23,7 @@ from loguru import logger
 from multiplexdesigner.config import DesignerConfig, load_config
 from multiplexdesigner.designer.design import design_primers
 from multiplexdesigner.designer.multiplexpanel import MultiplexPanel, panel_factory
+from multiplexdesigner.logging import configure_file_logging
 
 
 @dataclass
@@ -33,6 +35,8 @@ class PipelineResult:
     config: DesignerConfig
     steps_completed: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    multiplex_solutions: list = field(default_factory=list)
+    selected_pairs: list = field(default_factory=list)
 
     @property
     def success(self) -> bool:
@@ -116,6 +120,10 @@ def run_pipeline(
 
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Enable file logging to output directory
+    log_file = configure_file_logging(str(output_dir))
+    logger.info(f"Log file: {log_file}")
 
     # Load configuration
     logger.info("Loading configuration...")
@@ -215,6 +223,92 @@ def run_pipeline(
         result.steps_completed.append("specificity_skipped")
 
     # =========================================================================
+    # Step 5: Multiplex optimization
+    # =========================================================================
+    logger.info("Running multiplex optimization...")
+
+    try:
+        from multiplexdesigner.selector.cost import MultiplexCostFunction
+        from multiplexdesigner.selector.selectors import selector_collection
+
+        selector_df = panel.build_selector_dataframe()
+        pair_lookup = panel.build_pair_lookup()
+
+        if selector_df.empty:
+            logger.warning("No primer pairs available for multiplex optimization.")
+        else:
+            cost_fn = MultiplexCostFunction(
+                pair_lookup, config.multiplex_picker_parameters
+            )
+            selector_cls = selector_collection["Greedy"]
+            selector = selector_cls(selector_df, cost_fn)
+            solutions = selector.run(
+                N=config.multiplex_picker_parameters.initial_solutions
+            )
+
+            # Sort by cost and keep top solutions
+            solutions.sort(key=lambda m: m.cost)
+            top_n = config.multiplex_picker_parameters.top_solutions_to_keep
+            result.multiplex_solutions = solutions[:top_n]
+
+            # Auto-apply the best solution
+            if solutions:
+                best = solutions[0]
+                selected = []
+                for pair_id in best.primer_pairs:
+                    pair = pair_lookup.get(pair_id)
+                    if pair:
+                        pair.selected = True
+                        selected.append(pair)
+                result.selected_pairs = selected
+                logger.info(
+                    f"Selected {len(selected)} primer pairs (best cost: {best.cost:.2f})"
+                )
+
+            result.steps_completed.append("multiplex_optimized")
+    except Exception as e:
+        logger.error(f"Multiplex optimization failed: {e}")
+        result.errors.append(f"Multiplex optimization failed: {e}")
+
+    # =========================================================================
+    # Step 6: Save final results
+    # =========================================================================
+    logger.info("Saving final results...")
+
+    try:
+        # Selected multiplex (best solution)
+        if result.selected_pairs:
+            panel.save_selected_multiplex_csv(
+                str(output_dir / "selected_multiplex.csv"),
+                result.selected_pairs,
+            )
+
+        # Top N panel solutions
+        if result.multiplex_solutions:
+            panel.save_top_panels_csv(
+                str(output_dir / "top_panels.csv"),
+                result.multiplex_solutions,
+            )
+
+        # Off-target details for selected pairs
+        if result.selected_pairs:
+            panel.save_off_targets_csv(
+                str(output_dir / "off_targets.csv"),
+                result.selected_pairs,
+            )
+
+        # Panel summary JSON
+        panel.save_panel_summary_json(
+            str(output_dir / "panel_summary.json"),
+            result,
+        )
+
+        result.steps_completed.append("final_results_saved")
+    except Exception as e:
+        logger.warning(f"Could not save final results: {e}")
+        result.errors.append(f"Save final results failed: {e}")
+
+    # =========================================================================
     # Summary
     # =========================================================================
     logger.info("=" * 60)
@@ -222,7 +316,13 @@ def run_pipeline(
     logger.info("=" * 60)
     logger.info(f"Panel: {panel.panel_name}")
     logger.info(f"Junctions: {len(panel.junctions)}")
-    logger.info(f"Total primer pairs: {result.num_primer_pairs}")
+    logger.info(f"Total candidate primer pairs: {result.num_primer_pairs}")
+    logger.info(f"Selected primer pairs: {len(result.selected_pairs)}")
+    if result.multiplex_solutions:
+        logger.info(
+            f"Top {len(result.multiplex_solutions)} multiplex solutions "
+            f"(best cost: {result.multiplex_solutions[0].cost:.2f})"
+        )
     logger.info(f"Steps completed: {', '.join(result.steps_completed)}")
     if result.errors:
         logger.warning(f"Errors encountered: {len(result.errors)}")

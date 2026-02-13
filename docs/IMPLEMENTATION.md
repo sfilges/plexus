@@ -6,7 +6,7 @@ A package to design multiplex PCR primers.
 
 The user provides a list of target junctions (positions in the genome) and the package designs primers around these junctions. Sensible defaults are used for the parameters embedded in the package config, but can be altered by the user by providing a config file.
 
-Junction file + config file -> design candidate primers -> check for SNPs -> identify cross dimers through thermodynamic alignment -> blast to0 identify off-targets -> optimize the multiplex -> output multiplex panel
+Junction file + config file -> design candidate primers -> check for SNPs -> identify cross dimers through thermodynamic alignment -> blast to identify off-targets -> optimize the multiplex -> output multiplex panel
 
 ## Modules
 

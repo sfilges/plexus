@@ -23,13 +23,17 @@ class BlastResultsAnnotator:
         """
         self.annotations = {
             "from_3prime": lambda row: row["qend"] == row["length"],
-            "length_pass_3prime": lambda row: row["length"] >= length_threshold
-            and row["pident"] == 100
-            and row["from_3prime"],
-            "evalue_pass_3prime": lambda row: row["evalue"] < evalue_threshold
-            and row["from_3prime"],
-            "predicted_bound": lambda row: row["length_pass_3prime"]
-            or row["evalue_pass_3prime"],
+            "length_pass_3prime": lambda row: (
+                row["length"] >= length_threshold
+                and row["pident"] == 100
+                and row["from_3prime"]
+            ),
+            "evalue_pass_3prime": lambda row: (
+                row["evalue"] < evalue_threshold and row["from_3prime"]
+            ),
+            "predicted_bound": lambda row: (
+                row["length_pass_3prime"] or row["evalue_pass_3prime"]
+            ),
         }
 
     def add_annotations(self):

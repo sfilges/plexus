@@ -25,10 +25,11 @@
 # -----------------------------------------------------------------------------------------------
 
 import random
-import sys
 from abc import ABC, abstractmethod
 from functools import reduce
 from itertools import product
+
+from loguru import logger
 
 from .multiplex import Multiplex
 
@@ -90,7 +91,9 @@ class GreedySearch(MultiplexSelector):
 
         # Iterate
         multiplexes = []
-        sys.stdout.write(f"  Iterations complete: {0}/{N}")
+        logger.info(
+            f"Running greedy search with {N} iterations over {len(target_ids)} targets..."
+        )
         for ix in range(N):
             # Prepare empty new multiplex
             multiplex = []
@@ -112,12 +115,10 @@ class GreedySearch(MultiplexSelector):
             # Add to list of all multiplexes
             multiplexes.append(Multiplex(cost=min(costs), primer_pairs=multiplex))
 
-            # Print
-            sys.stdout.write("\r")
-            sys.stdout.flush()
-            sys.stdout.write(f"  Iterations complete: {ix + 1}/{N}")
-        print("\nDone.\n")
+            if (ix + 1) % max(1, N // 10) == 0:
+                logger.debug(f"Greedy search: {ix + 1}/{N} iterations complete")
 
+        logger.info(f"Greedy search complete. Generated {len(multiplexes)} solutions.")
         return multiplexes
 
 
@@ -139,13 +140,12 @@ class BruteForce(MultiplexSelector):
 
         # Compute number of iterations required
         total_N = reduce(lambda a, b: a * b, [len(t) for t in target_pairs])
-        print(
+        logger.info(
             f"Found {int(self.primer_df.shape[0] / 2)} primer pairs across {len(target_pairs)} targets."
         )
-        print(f"A total of {total_N} possible multiplexes exist.")
+        logger.info(f"A total of {total_N} possible multiplexes exist.")
 
         # Iterate over all possible multiplexes
-        sys.stdout.write(f"  Iterations complete: {0}/{total_N}")
         stored_multiplexes = []
         stored_costs = []
         for ix, primer_pairs in enumerate(product(*target_pairs)):
@@ -165,13 +165,12 @@ class BruteForce(MultiplexSelector):
                     stored_costs.index(highest_stored_cost), multiplex
                 )
 
-            # Print
-            sys.stdout.write("\r")
-            sys.stdout.flush()
-            sys.stdout.write(f"  Iterations complete: {ix + 1}/{total_N}")
+            if (ix + 1) % max(1, total_N // 10) == 0:
+                logger.debug(f"Brute force: {ix + 1}/{total_N} iterations complete")
 
-        print("\nDone.\n")
-
+        logger.info(
+            f"Brute force complete. Stored {len(stored_multiplexes)} solutions."
+        )
         return stored_multiplexes
 
 
@@ -186,7 +185,7 @@ class RandomSearch(MultiplexSelector):
 
         # Iterate
         multiplexes = []
-        sys.stdout.write(f"  Iterations complete: {0}/{N}")
+        logger.info(f"Running random search with {N} iterations...")
         for ix in range(N):
             # Randomly generate a multiplex
             multiplex = [random.choice(pairs) for _, pairs in target_pairs.items()]
@@ -197,12 +196,10 @@ class RandomSearch(MultiplexSelector):
             # Store
             multiplexes.append(Multiplex(cost=cost, primer_pairs=multiplex))
 
-            # Print
-            sys.stdout.write("\r")
-            sys.stdout.flush()
-            sys.stdout.write(f"  Iterations complete: {ix + 1}/{N}")
-        print("\nDone.\n")
+            if (ix + 1) % max(1, N // 10) == 0:
+                logger.debug(f"Random search: {ix + 1}/{N} iterations complete")
 
+        logger.info(f"Random search complete. Generated {len(multiplexes)} solutions.")
         return multiplexes
 
 

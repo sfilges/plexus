@@ -200,6 +200,11 @@ class MultiplexPickerParameters(BaseModel):
     allow_split_panel: bool = Field(default=False)
     max_splits: int = Field(default=2, ge=1, le=10)
 
+    # Cost function weights for multiplex optimization
+    wt_pair_penalty: float = Field(default=1.0, ge=0.0)
+    wt_off_target: float = Field(default=5.0, ge=0.0)
+    wt_cross_dimer: float = Field(default=1.0, ge=0.0)
+
     @model_validator(mode="after")
     def validate_plexity_range(self) -> MultiplexPickerParameters:
         """Validate that min <= target <= max plexity."""

@@ -246,7 +246,7 @@ class TestDesignerConfig:
     def test_from_preset_default(self):
         """Test loading default preset."""
         config = DesignerConfig.from_preset("default")
-        assert config.singleplex_design_parameters.PRIMER_OPT_TM == 68.0
+        assert config.singleplex_design_parameters.PRIMER_OPT_TM == 60.0
 
     def test_from_preset_lenient(self):
         """Test loading lenient preset."""
@@ -346,7 +346,7 @@ class TestLoadConfig:
         """Test loading default preset via load_config."""
         config = load_config(preset="default")
         assert isinstance(config, DesignerConfig)
-        assert config.singleplex_design_parameters.PRIMER_OPT_TM == 68.0
+        assert config.singleplex_design_parameters.PRIMER_OPT_TM == 60.0
 
     def test_load_preset_lenient(self):
         """Test loading lenient preset via load_config."""
