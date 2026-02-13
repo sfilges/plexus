@@ -1,7 +1,7 @@
 # plexus
 
-[![CI](https://github.com/simsendx/plexus/actions/workflows/ci.yml/badge.svg)](https://github.com/simsendx/plexus/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue)](https://github.com/simsendx/plexus)
+[![CI](https://github.com/sfilges/plexus/actions/workflows/ci.yml/badge.svg)](https://github.com/sfilges/plexus/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.10%E2%80%933.13-blue)](https://github.com/sfilges/plexus)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 `plexus` is a Python-based bioinformatics tool designed to automate the creation of multiplex PCR panels. It specifically targets workflows like cfDNA and simsen, integrating genomic data processing, primer design (via `primer3`), and specificity checking (via BLAST) to generate optimized primer sets for multiple targets simultaneously.
