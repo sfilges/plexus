@@ -25,7 +25,7 @@ from itertools import product
 
 from loguru import logger
 
-from multiplexdesigner.utils.root_dir import ROOT_DIR
+from plexus.utils.root_dir import ROOT_DIR
 
 # ================================================================================
 # Define an alignment between two primers

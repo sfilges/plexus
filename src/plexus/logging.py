@@ -33,7 +33,7 @@ def configure_file_logging(log_dir: str = ".") -> str:
         Path to the log file.
     """
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    log_filename = f"{log_dir}/multiplexdesigner_{timestamp}.log"
+    log_filename = f"{log_dir}/plexus_{timestamp}.log"
 
     logger.add(
         log_filename,

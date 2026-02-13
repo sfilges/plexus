@@ -16,7 +16,7 @@ from dataclasses import dataclass
 import primer3
 from loguru import logger
 
-from multiplexdesigner.utils.utils import gc_content
+from plexus.utils.utils import gc_content
 
 # Kelvin to Celsius conversion factor
 T_KELVIN = 273.15

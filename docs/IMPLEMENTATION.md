@@ -1,4 +1,4 @@
-# Implementation specs for multiplexdesigner
+# Implementation specs for plexus
 
 A package to design multiplex PCR primers.
 

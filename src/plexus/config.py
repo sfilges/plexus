@@ -17,7 +17,7 @@ from typing import Any, Literal
 from loguru import logger
 from pydantic import BaseModel, Field, model_validator
 
-from multiplexdesigner.utils.root_dir import ROOT_DIR
+from plexus.utils.root_dir import ROOT_DIR
 
 
 class SaltCorrectionFormula(str, Enum):

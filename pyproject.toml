@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "multiplexdesigner"
+name = "plexus"
 dynamic = ["version"]
 description = "Package for designing multiplex PCR panels"
 readme = "README.md"
@@ -32,11 +32,11 @@ dependencies = [
 ]
 
 [project.scripts]
-multiplexdesigner = "multiplexdesigner.cli:app"
+plexus = "plexus.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/sfilges/multiplexDesigner"
-Repository = "https://github.com/sfilges/multiplexDesigner"
+Homepage = "https://github.com/sfilges/plexus"
+Repository = "https://github.com/sfilges/plexus"
 
 [project.optional-dependencies]
 dev = ["mypy", "pre-commit", "pytest", "pytest-cov", "ruff"]
@@ -45,10 +45,10 @@ dev = ["mypy", "pre-commit", "pytest", "pytest-cov", "ruff"]
 allow-direct-references = true
 
 [tool.hatch.version]
-path = "src/multiplexdesigner/version.py"
+path = "src/plexus/version.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/multiplexdesigner"]
+packages = ["src/plexus"]
 
 [tool.ruff]
 line-length = 88
@@ -60,7 +60,7 @@ select = ["E", "F", "I", "B", "UP"]
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["multiplexdesigner"]
+known-first-party = ["plexus"]
 
 [tool.mypy]
 python_version = "3.10"
@@ -68,5 +68,5 @@ strict = false
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-addopts = "--cov=multiplexdesigner --cov-report=term-missing"
+addopts = "--cov=plexus --cov-report=term-missing"
 testpaths = ["tests"]

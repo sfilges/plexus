@@ -19,7 +19,7 @@ from typing import Any
 import pandas as pd
 from loguru import logger
 
-from multiplexdesigner.pipeline import MultiPanelResult, PipelineResult, run_pipeline
+from plexus.pipeline import MultiPanelResult, PipelineResult, run_pipeline
 
 DEFAULT_PANEL_ID = "default"
 

@@ -1,4 +1,4 @@
-name: multiplexdesigner-run
+name: plexus-run
 channels:
   - conda-forge
   - bioconda

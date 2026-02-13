@@ -4,7 +4,7 @@
 
 import pytest
 
-from multiplexdesigner.designer.thal import oligotm, seqtm, symmetry
+from plexus.designer.thal import oligotm, seqtm, symmetry
 
 
 class TestThal:

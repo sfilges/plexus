@@ -2,10 +2,10 @@ import os
 
 from loguru import logger
 
-from multiplexdesigner.blast.annotator import BlastResultsAnnotator
-from multiplexdesigner.blast.blast_runner import BlastRunner
-from multiplexdesigner.blast.offtarget_finder import AmpliconFinder
-from multiplexdesigner.designer.multiplexpanel import MultiplexPanel
+from plexus.blast.annotator import BlastResultsAnnotator
+from plexus.blast.blast_runner import BlastRunner
+from plexus.blast.offtarget_finder import AmpliconFinder
+from plexus.designer.multiplexpanel import MultiplexPanel
 
 
 def run_specificity_check(panel: MultiplexPanel, work_dir: str, genome_fasta: str):

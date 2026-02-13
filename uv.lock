@@ -368,7 +368,7 @@ wheels = [
 ]
 
 [[package]]
-name = "multiplexdesigner"
+name = "plexus"
 source = { editable = "." }
 dependencies = [
     { name = "biopython" },

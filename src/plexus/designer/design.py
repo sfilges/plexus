@@ -12,15 +12,15 @@ import warnings
 import primer3
 from loguru import logger
 
-from multiplexdesigner.designer.multiplexpanel import (
+from plexus.designer.multiplexpanel import (
     MultiplexPanel,
     PrimerDesigns,
 )
-from multiplexdesigner.designer.thal import (
+from plexus.designer.thal import (
     calculate_single_primer_thermodynamics,
     calculate_single_primer_thermodynamics_parallel,
 )
-from multiplexdesigner.utils.utils import generate_kmers, reverse_complement
+from plexus.utils.utils import generate_kmers, reverse_complement
 
 # ================================================================================
 # Wrapper function for different primer design algorithms.

@@ -189,7 +189,7 @@ def generate_kmers(
         min_gc - Minimum GC content of kmer
         max_gc - Maximum GC content of kmer
     """
-    from multiplexdesigner.designer.primer import Primer
+    from plexus.designer.primer import Primer
 
     if k_min >= k_max:
         error_msg = (

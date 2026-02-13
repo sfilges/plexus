@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from multiplexdesigner.designer.multiplexpanel import JunctionInput, MultiplexPanel
+from plexus.designer.multiplexpanel import JunctionInput, MultiplexPanel
 
 
 class TestMultiplexPanelImport:

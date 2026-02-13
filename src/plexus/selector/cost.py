@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from itertools import combinations
 
-from multiplexdesigner.aligner import PrimerDimerPredictor
-from multiplexdesigner.config import MultiplexPickerParameters
-from multiplexdesigner.designer.primer import PrimerPair
+from plexus.aligner import PrimerDimerPredictor
+from plexus.config import MultiplexPickerParameters
+from plexus.designer.primer import PrimerPair
 
 
 class MultiplexCostFunction:

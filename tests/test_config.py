@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from multiplexdesigner.config import (
+from plexus.config import (
     DesignerConfig,
     MultiplexPickerParameters,
     PCRConditions,

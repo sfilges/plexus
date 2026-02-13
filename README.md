@@ -1,13 +1,13 @@
-# multiplexDesigner
+# plexus
 
-`multiplexDesigner` is a Python-based bioinformatics tool designed to automate the creation of multiplex PCR panels. It specifically targets workflows like cfDNA and simsen, integrating genomic data processing, primer design (via `primer3`), and specificity checking (via BLAST) to generate optimized primer sets for multiple targets simultaneously.
+`plexus` is a Python-based bioinformatics tool designed to automate the creation of multiplex PCR panels. It specifically targets workflows like cfDNA and simsen, integrating genomic data processing, primer design (via `primer3`), and specificity checking (via BLAST) to generate optimized primer sets for multiple targets simultaneously.
 
 ## Features
 
 - **Automated Primer Design**: Uses `primer3-py` to generate primer candidates for provided genomic junctions.
-- **Multiplex Optimization**: tailored for multiplex PCR panels.
+- **Multiplex Optimization**: Tailored for multiplex PCR panels.
 - **Specificity Checking**: Integrates BLAST to check for off-target amplification and primer specificity.
-- **Configuration Presets**: Includes default and lenient configuration presets for different design stringency.
+- **Configuration Presets**: Includes default and lenient configuration presets for different design stringencies.
 - **CLI Interface**: Easy-to-use command line interface for running the design pipeline.
 
 ## Installation
@@ -22,8 +22,8 @@
 This project uses `uv` for package management.
 
 ```bash
-git clone https://github.com/simsendx/multiplexDesigner
-cd multiplexDesigner
+git clone https://github.com/simsendx/plexus
+cd plexus
 uv pip install -e .
 ```
 
@@ -32,23 +32,23 @@ uv pip install -e .
 You can also set up the environment using Conda:
 
 ```bash
-git clone https://github.com/simsendx/multiplexDesigner
-cd multiplexDesigner
+git clone https://github.com/simsendx/plexus
+cd plexus
 conda env create -f config/environment.yml
-conda activate multiplexdesigner-run
+conda activate plexus-run
 pip install -e .
 ```
 
 ## Usage
 
-The primary interface is the `multiplexdesigner` CLI.
+The primary interface is the `plexus` CLI.
 
 ### Basic Command
 
 To run the complete design pipeline:
 
 ```bash
-multiplexdesigner run \
+plexus run \
   --input data/junctions.csv \
   --fasta data/genome.fa \
   --output results/ \
@@ -76,7 +76,7 @@ See `data/junctions.csv` for a complete example.
 - `-p, --preset`: Configuration preset (`default` or `lenient`).
 - `--skip-blast`: Skip the BLAST specificity check (faster, but less validation).
 
-Run `multiplexdesigner --help` for a full list of commands and options.
+Run `plexus --help` for a full list of commands and options.
 
 ## Configuration
 

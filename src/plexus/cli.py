@@ -14,10 +14,10 @@ import typer
 from loguru import logger
 from rich.console import Console
 
-from multiplexdesigner.version import __version__
+from plexus.version import __version__
 
 app = typer.Typer(
-    name="multiplexdesigner",
+    name="plexus",
     help="Design multiplex PCR primer panels.",
     no_args_is_help=True,
     rich_markup_mode="rich",
@@ -29,9 +29,7 @@ console = Console()
 def version_callback(value: bool) -> None:
     """Show version and exit."""
     if value:
-        console.print(
-            f"[bold green]Multiplex Primer Designer[/bold green] version {__version__}"
-        )
+        console.print(f"[bold green]Plexus[/bold green] version {__version__}")
         raise typer.Exit()
 
 
@@ -54,7 +52,7 @@ def main(
 ) -> None:
     """Multiplex Primer Designer - Design optimized multiplex PCR primer panels."""
     log_level = "DEBUG" if verbose else "INFO"
-    logger.add("multiplexdesigner.log", level=log_level)
+    logger.add("plexus.log", level=log_level)
 
 
 @app.command()
@@ -152,12 +150,12 @@ def run(
     output_dir/<panel_id>/. Use --parallel to run panels concurrently.
 
     Example:
-        multiplexdesigner run -i junctions.csv -f genome.fa -o results/
+        plexus run -i junctions.csv -f genome.fa -o results/
     """
-    from multiplexdesigner.orchestrator import run_multi_panel
-    from multiplexdesigner.pipeline import MultiPanelResult
+    from plexus.orchestrator import run_multi_panel
+    from plexus.pipeline import MultiPanelResult
 
-    console.print("[bold green]Multiplex Primer Designer[/bold green]")
+    console.print("[bold green]Plexus[/bold green]")
     console.print(f"  Input:  {input_file}")
     console.print(f"  FASTA:  {fasta_file}")
     console.print(f"  Output: {output_dir}")

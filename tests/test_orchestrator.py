@@ -9,13 +9,13 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
-from multiplexdesigner.orchestrator import (
+from plexus.orchestrator import (
     DEFAULT_PANEL_ID,
     _detect_panels,
     _write_panel_csv,
     run_multi_panel,
 )
-from multiplexdesigner.pipeline import MultiPanelResult, PipelineResult
+from plexus.pipeline import MultiPanelResult, PipelineResult
 
 # ================================================================================
 # Tests for _detect_panels
@@ -166,7 +166,7 @@ class TestRunMultiPanel:
             errors=[],
         )
 
-    @patch("multiplexdesigner.orchestrator.run_pipeline")
+    @patch("plexus.orchestrator.run_pipeline")
     def test_single_panel_returns_pipeline_result(self, mock_run, tmp_path):
         """No Panel column returns PipelineResult (not MultiPanelResult)."""
         csv_path = tmp_path / "junctions.csv"
@@ -187,7 +187,7 @@ class TestRunMultiPanel:
         assert isinstance(result, PipelineResult)
         mock_run.assert_called_once()
 
-    @patch("multiplexdesigner.orchestrator.run_pipeline")
+    @patch("plexus.orchestrator.run_pipeline")
     def test_multi_panel_returns_multi_panel_result(self, mock_run, tmp_path):
         """Panel column returns MultiPanelResult."""
         csv_path = tmp_path / "junctions.csv"
@@ -212,7 +212,7 @@ class TestRunMultiPanel:
         assert len(result.panel_results) == 2
         assert mock_run.call_count == 2
 
-    @patch("multiplexdesigner.orchestrator.run_pipeline")
+    @patch("plexus.orchestrator.run_pipeline")
     def test_output_dirs_created_per_panel(self, mock_run, tmp_path):
         """Each panel gets output_dir/panel_id/ passed to run_pipeline."""
         csv_path = tmp_path / "junctions.csv"
@@ -240,7 +240,7 @@ class TestRunMultiPanel:
         assert str(output_dir / "A") in call_output_dirs
         assert str(output_dir / "B") in call_output_dirs
 
-    @patch("multiplexdesigner.orchestrator.run_pipeline")
+    @patch("plexus.orchestrator.run_pipeline")
     def test_multi_panel_summary_json_written(self, mock_run, tmp_path):
         """Multi-panel mode writes multi_panel_summary.json."""
         csv_path = tmp_path / "junctions.csv"
@@ -271,7 +271,7 @@ class TestRunMultiPanel:
         assert sorted(summary["panel_ids"]) == ["A", "B"]
         assert summary["all_successful"] is True
 
-    @patch("multiplexdesigner.orchestrator.run_pipeline")
+    @patch("plexus.orchestrator.run_pipeline")
     def test_backward_compat_single_panel_flat_output(self, mock_run, tmp_path):
         """Single-panel CSV produces flat output_dir/ (no subfolder)."""
         csv_path = tmp_path / "junctions.csv"
@@ -294,7 +294,7 @@ class TestRunMultiPanel:
         call_kwargs = mock_run.call_args[1]
         assert call_kwargs["output_dir"] == output_dir
 
-    @patch("multiplexdesigner.orchestrator.run_pipeline")
+    @patch("plexus.orchestrator.run_pipeline")
     def test_temp_csvs_cleaned_up(self, mock_run, tmp_path):
         """Temp panel CSVs are cleaned up after execution."""
         csv_path = tmp_path / "junctions.csv"

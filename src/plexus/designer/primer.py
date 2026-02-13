@@ -7,8 +7,8 @@
 
 from dataclasses import dataclass, field
 
-from multiplexdesigner.designer.thal import seqtm
-from multiplexdesigner.utils.utils import create_primer_dataframe, gc_content
+from plexus.designer.thal import seqtm
+from plexus.utils.utils import create_primer_dataframe, gc_content
 
 
 @dataclass

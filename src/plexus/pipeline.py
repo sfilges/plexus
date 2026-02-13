@@ -20,10 +20,10 @@ from typing import Any
 
 from loguru import logger
 
-from multiplexdesigner.config import DesignerConfig, load_config
-from multiplexdesigner.designer.design import design_primers
-from multiplexdesigner.designer.multiplexpanel import MultiplexPanel, panel_factory
-from multiplexdesigner.logging import configure_file_logging
+from plexus.config import DesignerConfig, load_config
+from plexus.designer.design import design_primers
+from plexus.designer.multiplexpanel import MultiplexPanel, panel_factory
+from plexus.logging import configure_file_logging
 
 
 @dataclass
@@ -250,7 +250,7 @@ def run_pipeline(
         logger.info("Running BLAST specificity check...")
 
         try:
-            from multiplexdesigner.blast.specificity import run_specificity_check
+            from plexus.blast.specificity import run_specificity_check
 
             blast_dir = output_dir / "blast"
             run_specificity_check(panel, str(blast_dir), str(fasta_file))
@@ -272,8 +272,8 @@ def run_pipeline(
     logger.info("Running multiplex optimization...")
 
     try:
-        from multiplexdesigner.selector.cost import MultiplexCostFunction
-        from multiplexdesigner.selector.selectors import selector_collection
+        from plexus.selector.cost import MultiplexCostFunction
+        from plexus.selector.selectors import selector_collection
 
         selector_df = panel.build_selector_dataframe()
         pair_lookup = panel.build_pair_lookup()

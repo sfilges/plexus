@@ -16,10 +16,10 @@ import pysam
 from loguru import logger
 from pydantic import BaseModel, Field, ValidationError
 
-from multiplexdesigner.aligner import PrimerDimerPredictor
-from multiplexdesigner.config import DesignerConfig, load_config
-from multiplexdesigner.designer.primer import PrimerPair
-from multiplexdesigner.utils.utils import write_fasta_from_dict
+from plexus.aligner import PrimerDimerPredictor
+from plexus.config import DesignerConfig, load_config
+from plexus.designer.primer import PrimerPair
+from plexus.utils.utils import write_fasta_from_dict
 
 # ================================================================================
 # Pydantic models for input validation
