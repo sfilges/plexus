@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "Package for designing multiplex PCR panels"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.14"
 authors = [{ name = "Stefan Filges", email = "stefan@simsendiagnostics.com" }]
 classifiers = [
     "Development Status :: 3 - Alpha",

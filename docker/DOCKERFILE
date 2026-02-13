@@ -1,17 +1,21 @@
 # Use an official Python runtime as a parent image
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 # Set the working directory in the container
 WORKDIR /app
 
-# Copy the entire repository into the container
+# Copy project metadata first for better layer caching
+COPY pyproject.toml README.md ./
+COPY src/plexus/version.py src/plexus/version.py
+
+# Install dependencies (cached unless pyproject.toml changes)
+RUN pip install --no-cache-dir .
+
+# Copy the full source code
 COPY . .
 
-# Install the package in editable mode
+# Reinstall in editable mode with full source
 RUN pip install --no-cache-dir -e .
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements-dev.txt
-
-# Command to run your application
-CMD ["python", "your_module/main.py"]
+# Default entry point
+CMD ["plexus"]
