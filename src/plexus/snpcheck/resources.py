@@ -147,4 +147,4 @@ def resource_status_message() -> str:
     if is_resource_available():
         size_mb = vcf_path.stat().st_size / (1024 * 1024)
         return f"gnomAD VCF: cached ({size_mb:.0f} MB) at {vcf_path}"
-    return f"gnomAD VCF: not downloaded (run `plexus download-resources`)"
+    return "gnomAD VCF: not downloaded (run `plexus download-resources`)"

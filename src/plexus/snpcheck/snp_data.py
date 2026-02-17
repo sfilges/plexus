@@ -197,7 +197,9 @@ def get_snp_vcf(
     if is_resource_available():
         cached_vcf = get_cached_vcf_path()
         logger.info(f"Using cached gnomAD VCF: {cached_vcf}")
-        return intersect_vcf_with_regions(cached_vcf, panel, output_dir, padding=padding)
+        return intersect_vcf_with_regions(
+            cached_vcf, panel, output_dir, padding=padding
+        )
 
     # 4. Nothing available — actionable error
     raise FileNotFoundError(

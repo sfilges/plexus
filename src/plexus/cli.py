@@ -259,7 +259,7 @@ def download_resources(
     """Download the gnomAD AF-only VCF for SNP checking."""
     from plexus.snpcheck.resources import download_gnomad_vcf, get_cache_dir
 
-    console.print(f"[bold green]Plexus[/bold green] — downloading SNP resources")
+    console.print("[bold green]Plexus[/bold green] — downloading SNP resources")
     console.print(f"  Cache directory: {get_cache_dir()}")
     console.print()
 

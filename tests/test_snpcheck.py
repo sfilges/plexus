@@ -18,14 +18,12 @@ from plexus.snpcheck.checker import (
     run_snp_check,
 )
 from plexus.snpcheck.resources import (
+    DEFAULT_CACHE_DIR,
     ENV_DATA_DIR,
     ENV_SNP_VCF,
-    DEFAULT_CACHE_DIR,
-    GNOMAD_VCF_FILENAME,
     GNOMAD_TBI_FILENAME,
+    GNOMAD_VCF_FILENAME,
     get_cache_dir,
-    get_cached_tbi_path,
-    get_cached_vcf_path,
     is_resource_available,
 )
 from plexus.snpcheck.snp_data import (
@@ -479,9 +477,7 @@ class TestDownloadGnomadVcf:
             (tmp_path / GNOMAD_VCF_FILENAME).touch()
             (tmp_path / GNOMAD_TBI_FILENAME).touch()
 
-            with patch(
-                "plexus.snpcheck.resources._download_with_progress"
-            ) as mock_dl:
+            with patch("plexus.snpcheck.resources._download_with_progress") as mock_dl:
                 result = download_gnomad_vcf()
                 mock_dl.assert_not_called()
             assert result == tmp_path / GNOMAD_VCF_FILENAME
@@ -492,9 +488,7 @@ class TestDownloadGnomadVcf:
 
         with (
             patch("plexus.snpcheck.resources.get_cache_dir", return_value=tmp_path),
-            patch(
-                "plexus.snpcheck.resources._download_with_progress"
-            ) as mock_dl,
+            patch("plexus.snpcheck.resources._download_with_progress") as mock_dl,
         ):
             download_gnomad_vcf()
             assert mock_dl.call_count == 2
@@ -507,9 +501,7 @@ class TestDownloadGnomadVcf:
             (tmp_path / GNOMAD_VCF_FILENAME).touch()
             (tmp_path / GNOMAD_TBI_FILENAME).touch()
 
-            with patch(
-                "plexus.snpcheck.resources._download_with_progress"
-            ) as mock_dl:
+            with patch("plexus.snpcheck.resources._download_with_progress") as mock_dl:
                 download_gnomad_vcf(force=True)
                 assert mock_dl.call_count == 2
 

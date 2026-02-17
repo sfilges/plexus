@@ -239,9 +239,7 @@ class DesignerConfig(BaseModel):
     multiplex_picker_parameters: MultiplexPickerParameters = Field(
         default_factory=MultiplexPickerParameters
     )
-    snp_check_parameters: SnpCheckParameters = Field(
-        default_factory=SnpCheckParameters
-    )
+    snp_check_parameters: SnpCheckParameters = Field(default_factory=SnpCheckParameters)
 
     @classmethod
     def from_json_file(cls, file_path: str | Path) -> DesignerConfig:
