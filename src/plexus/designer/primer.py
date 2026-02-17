@@ -7,9 +7,6 @@
 
 from dataclasses import dataclass, field
 
-from plexus.designer.thal import seqtm
-from plexus.utils.utils import create_primer_dataframe, gc_content
-
 
 @dataclass
 class Primer:
@@ -144,64 +141,3 @@ class PrimerPair:
         penalty += wt_diff_tm * abs(primer_left_tm - primer_right_tm)
 
         return penalty
-
-
-def get_primer_dict(junction):
-    """
-    Extract unique primer pairs from a junction.
-
-    Parameters:
-    df (pandas.DataFrame): DataFrame containing primer pair data generated with primer3.
-
-    Returns:
-    tuple: A tuple containing:
-        - list of unique PrimerPair objects
-        - dictionary mapping primer sequences and directions to Primer objects
-    """
-
-    df = create_primer_dataframe(junction.primer3_designs)
-
-    primer_dict = {}  # Maps (sequence, direction) to Primer object
-
-    for index, row in df.iterrows():
-        # FORWARD
-        left_seq = row["left_sequence"]
-        left_direction = "forward"
-        left_key = (left_seq, left_direction)
-        if left_key not in primer_dict:
-            left_tm_bound = seqtm(left_seq)
-            left_primer = Primer(
-                name=f"{junction.name}_{index}_forward",
-                seq=left_seq,
-                direction=left_direction,
-                start=row["left_coords"][0],
-                length=row["left_coords"][1],
-                tm_primer3=round(row["left_tm"], 2),
-                tm=round(left_tm_bound.Tm, 2),
-                bound=round(left_tm_bound.bound, 2),
-                gc=round(gc_content(left_seq), 2),
-                penalty=row["left_penalty"],
-            )
-            primer_dict[left_key] = left_primer
-
-        # REVERSE
-        right_seq = row["right_sequence"]
-        right_direction = "reverse"
-        right_key = (right_seq, right_direction)
-        if right_key not in primer_dict:
-            right_tm_bound = seqtm(right_seq)
-            right_primer = Primer(
-                name=f"{junction.name}_{index}_reverse",
-                seq=right_seq,
-                direction=right_direction,
-                start=row["right_coords"][0],
-                length=row["right_coords"][1],
-                tm_primer3=round(row["right_tm"], 2),
-                tm=round(right_tm_bound.Tm, 2),
-                bound=round(right_tm_bound.bound, 2),
-                gc=round(gc_content(right_seq), 2),
-                penalty=row["right_penalty"],
-            )
-            primer_dict[right_key] = right_primer
-
-    return primer_dict

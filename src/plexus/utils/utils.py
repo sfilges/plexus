@@ -1,6 +1,5 @@
 import warnings
 
-import pandas as pd
 from loguru import logger
 
 
@@ -54,107 +53,6 @@ def reverse_complement(dna: str) -> str:
         return reverse_comp
     except KeyError as e:
         raise ValueError(f"Invalid DNA base: {e.args[0]}") from e
-
-
-# Convert different sections to DataFrames
-def convert_primer_data_to_tables(data: dict) -> dict:
-    tables = {}
-
-    # 1. Primer Pairs Summary
-    if "PRIMER_PAIR" in data:
-        primer_pairs_df = pd.DataFrame(data["PRIMER_PAIR"])
-        primer_pairs_df.index.name = "Pair_ID"
-        primer_pairs_df = primer_pairs_df.round(3)  # Round decimals
-        tables["primer_pairs"] = primer_pairs_df
-
-    # 2. Left Primers
-    if "PRIMER_LEFT" in data:
-        left_primers_df = pd.DataFrame(data["PRIMER_LEFT"])
-        left_primers_df.index.name = "Left_Primer_ID"
-        left_primers_df = left_primers_df.round(3)
-        tables["left_primers"] = left_primers_df
-
-    # 3. Right Primers
-    if "PRIMER_RIGHT" in data:
-        right_primers_df = pd.DataFrame(data["PRIMER_RIGHT"])
-        right_primers_df.index.name = "Right_Primer_ID"
-        right_primers_df = right_primers_df.round(3)
-        tables["right_primers"] = right_primers_df
-
-    # 4. Internal Primers
-    if "PRIMER_INTERNAL" in data:
-        internal_primers_df = pd.DataFrame(data["PRIMER_INTERNAL"])
-        internal_primers_df.index.name = "Internal_Primer_ID"
-        internal_primers_df = internal_primers_df.round(3)
-        tables["internal_primers"] = internal_primers_df
-
-    # 5. Summary Statistics
-    summary_data = {
-        "Metric": [
-            "Left Primers Returned",
-            "Right Primers Returned",
-            "Internal Primers Returned",
-            "Primer Pairs Returned",
-        ],
-        "Count": [
-            data.get("PRIMER_LEFT_NUM_RETURNED", 0),
-            data.get("PRIMER_RIGHT_NUM_RETURNED", 0),
-            data.get("PRIMER_INTERNAL_NUM_RETURNED", 0),
-            data.get("PRIMER_PAIR_NUM_RETURNED", 0),
-        ],
-    }
-    tables["summary"] = pd.DataFrame(summary_data)
-
-    return tables
-
-
-def create_primer_dataframe(primer_data):
-    """
-    Convert primer design results to organized pandas DataFrames
-    """
-
-    # Method 1: Create a comprehensive primer pairs DataFrame
-    primer_pairs = []
-
-    num_pairs = primer_data.get("PRIMER_PAIR_NUM_RETURNED", 0)
-
-    for i in range(num_pairs):
-        pair_info = {
-            "pair_id": i,
-            "pair_penalty": primer_data.get(f"PRIMER_PAIR_{i}_PENALTY"),
-            "product_size": primer_data.get(f"PRIMER_PAIR_{i}_PRODUCT_SIZE"),
-            "product_tm": primer_data.get(f"PRIMER_PAIR_{i}_PRODUCT_TM"),
-            "compl_any_th": primer_data.get(f"PRIMER_PAIR_{i}_COMPL_ANY_TH"),
-            "compl_end_th": primer_data.get(f"PRIMER_PAIR_{i}_COMPL_END_TH"),
-            "template_misprime_th": primer_data.get(
-                f"PRIMER_PAIR_{i}_TEMPLATE_MISPRIMING_TH"
-            ),
-            # Left primer info
-            "left_sequence": primer_data.get(f"PRIMER_LEFT_{i}_SEQUENCE"),
-            "left_coords": primer_data.get(f"PRIMER_LEFT_{i}"),
-            "left_tm": primer_data.get(f"PRIMER_LEFT_{i}_TM"),
-            "left_gc_percent": primer_data.get(f"PRIMER_LEFT_{i}_GC_PERCENT"),
-            "left_penalty": primer_data.get(f"PRIMER_LEFT_{i}_PENALTY"),
-            "left_self_any_th": primer_data.get(f"PRIMER_LEFT_{i}_SELF_ANY_TH"),
-            "left_self_end_th": primer_data.get(f"PRIMER_LEFT_{i}_SELF_END_TH"),
-            "left_hairpin_th": primer_data.get(f"PRIMER_LEFT_{i}_HAIRPIN_TH"),
-            "left_end_stability": primer_data.get(f"PRIMER_LEFT_{i}_END_STABILITY"),
-            # Right primer info
-            "right_sequence": primer_data.get(f"PRIMER_RIGHT_{i}_SEQUENCE"),
-            "right_coords": primer_data.get(f"PRIMER_RIGHT_{i}"),
-            "right_tm": primer_data.get(f"PRIMER_RIGHT_{i}_TM"),
-            "right_gc_percent": primer_data.get(f"PRIMER_RIGHT_{i}_GC_PERCENT"),
-            "right_penalty": primer_data.get(f"PRIMER_RIGHT_{i}_PENALTY"),
-            "right_self_any_th": primer_data.get(f"PRIMER_RIGHT_{i}_SELF_ANY_TH"),
-            "right_self_end_th": primer_data.get(f"PRIMER_RIGHT_{i}_SELF_END_TH"),
-            "right_hairpin_th": primer_data.get(f"PRIMER_RIGHT_{i}_HAIRPIN_TH"),
-            "right_end_stability": primer_data.get(f"PRIMER_RIGHT_{i}_END_STABILITY"),
-        }
-        primer_pairs.append(pair_info)
-
-    df_pairs = pd.DataFrame(primer_pairs)
-
-    return df_pairs
 
 
 # ===============================================

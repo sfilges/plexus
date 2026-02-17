@@ -5,6 +5,14 @@ All notable changes to plexus will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 17-02-2026
+
+### Removed
+
+- Removed the experimental `primer3py_design_primers` function and the `"primer3py"` / `"primer3"` design method branches from `design.py`. Only the `"simsen"` design method remains.
+- Removed dead code tied to the primer3py pathway: `get_primer_dict()` from `primer.py`, and `create_primer_dataframe()` / `convert_primer_data_to_tables()` from `utils.py`.
+- Removed unused `import primer3`, `import json`, `import os`, and `import pandas` from affected modules.
+
 ## [0.2.2] - 17-02-2026
 
 ### Added

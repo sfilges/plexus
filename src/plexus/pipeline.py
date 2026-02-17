@@ -142,7 +142,7 @@ def run_pipeline(
     config_dict : dict | None
         Configuration dictionary (highest priority).
     design_method : str
-        Primer design algorithm ("simsen", "primer3py", or "primer3").
+        Primer design algorithm (default: "simsen").
     run_blast : bool
         Whether to run BLAST specificity check (default: True).
     padding : int
