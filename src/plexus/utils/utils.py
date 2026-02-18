@@ -71,6 +71,7 @@ def generate_kmers(
     max_N: int = 0,
     min_gc: int = 30,
     max_gc: int = 70,
+    gc_clamp: int = 0,
 ) -> list:
     """
     Generate k-mers as candidate primers.
@@ -122,7 +123,8 @@ def generate_kmers(
             kmer = target_sequence[x : x + k]
 
             if check_kmer(
-                kmer, max_poly_X=max_poly_X, max_N=max_N, min_gc=min_gc, max_gc=max_gc
+                kmer, max_poly_X=max_poly_X, max_N=max_N, min_gc=min_gc, max_gc=max_gc,
+                gc_clamp=gc_clamp,
             ):
                 kmer_filtered_counter += 1
 
@@ -152,19 +154,38 @@ def generate_kmers(
     return kmers
 
 
+def check_gc_clamp(kmer: str, window: int = 5, min_gc: int = 1, max_gc: int = 3) -> bool:
+    """Check that the 3' end has an acceptable number of G/C bases.
+
+    Returns True if the primer passes (1-3 G/C in last 5 bases), False otherwise.
+    A primer with 0 G/C at the 3' end is too weak; >3 G/C is too stable.
+    """
+    three_prime = kmer[-window:] if len(kmer) >= window else kmer
+    gc_count = sum(1 for b in three_prime if b in "GCgc")
+    return min_gc <= gc_count <= max_gc
+
+
 def check_kmer(
-    kmer, max_poly_X: int = 4, max_N: int = 0, min_gc: int = 30, max_gc: int = 70
+    kmer,
+    max_poly_X: int = 4,
+    max_N: int = 0,
+    min_gc: int = 30,
+    max_gc: int = 70,
+    gc_clamp: int = 0,
 ) -> bool:
     """
     Filter kmers (putative primers) based on GC-content, number of 'N' bases,
     and number of repeated bases (polyX).
     """
     kmer_gc = gc_content(kmer)
-    return (
+    passed = (
         min_gc <= kmer_gc <= max_gc  # Should be True
         and not check_N_in_kmers(kmer, max_N)  # Should be False
         and not find_max_poly_X(kmer, max_poly_X)  # Should be False
     )
+    if passed and gc_clamp > 0 and not check_gc_clamp(kmer):
+        return False
+    return passed
 
 
 def filter_kmers(kmers, max_poly_X=4, max_N=0):

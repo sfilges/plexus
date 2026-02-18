@@ -5,6 +5,31 @@ All notable changes to plexus will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 18-02-2026
+
+### Added
+
+- **GC clamp filter**: New `check_gc_clamp()` function rejects primers with fewer than 1 or more than 3 G/C bases in the last 5 bases of the 3' end. Controlled by `primer_gc_clamp` config field (0=off, 1=on). Enabled by default in the `default` preset, disabled in `lenient`.
+- **Position-weighted SNP penalties**: SNPs near the primer's 3' end now receive a higher penalty than those at the 5' end. New config fields `snp_3prime_window` (default 5 bp) and `snp_3prime_multiplier` (default 3.0x) in `SnpCheckParameters`. `_calc_weighted_snp_penalty()` computes orientation-aware distance from the 3' end for both forward and reverse primers.
+- **Coordinate-based BLAST off-target classification**: New `_is_on_target()` helper in `specificity.py` compares BLAST hit genomic coordinates against expected primer positions derived from `junction.design_start`, replacing the product-size heuristic that could misclassify pseudogene hits as on-target.
+- **Per-junction error recovery**: If primer design fails for a single junction (region too small, no k-mers found), the pipeline logs a warning and continues with the remaining junctions instead of crashing. Failed junctions are tracked in `PipelineResult.failed_junctions` and written to `failed_junctions.csv`.
+- **BLAST-enabled integration tests**: New `TestFullPipelineWithBlast` test class exercises the full pipeline with `run_blast=True`. Auto-skips when BLAST+ tools are not on PATH.
+- 40+ new unit tests across `test_utils.py`, `test_snpcheck.py`, `test_blast_specificity.py`, and `test_selector.py`.
+
+### Fixed
+
+- **BruteForce selector storage bug**: When the buffer was full and a better solution arrived, `.insert()` added to `stored_multiplexes` but never updated `stored_costs`, causing the two lists to desynchronize and the buffer to grow beyond `store_maximum`. Now uses index-based replacement consistent with the DFS selector.
+
+### Changed
+
+- `_count_snps_in_region()` now returns `(count, list[tuple[int, float]])` (position + allele frequency) instead of `(count, list[int])`, enabling position-aware penalty calculation.
+- Default `snp_penalty_weight` increased from 5.0 to 10.0 to better reflect typical primer pair penalty magnitudes.
+- `run_snp_check()` accepts new keyword arguments `snp_3prime_window` and `snp_3prime_multiplier`, passed through from config.
+
+### Removed
+
+- `SaltCorrectionFormula` and `ThermodynamicTable` enums from `config.py`. The code always uses SantaLucia1998 parameters; the enums suggested user-selectable alternatives that were never wired up. The `salt_correction_formula` and `thermodynamic_table` fields are removed from `PCRConditions` and both JSON preset configs.
+
 ## [0.3.4] - 18-02-2026
 
 ### Added

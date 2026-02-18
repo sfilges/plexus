@@ -12,6 +12,7 @@ from plexus.cli import app
 from plexus.config import DesignerConfig, SnpCheckParameters
 from plexus.designer.primer import Primer, PrimerPair
 from plexus.snpcheck.checker import (
+    _calc_weighted_snp_penalty,
     _count_snps_in_region,
     _get_allele_frequency,
     _primer_genomic_coords,
@@ -151,9 +152,9 @@ class TestCountSnpsInRegion:
     def test_no_variants(self):
         vcf = MagicMock()
         vcf.fetch.return_value = []
-        count, positions = _count_snps_in_region(vcf, "chr7", 1000, 1020, 0.01)
+        count, snps = _count_snps_in_region(vcf, "chr7", 1000, 1020, 0.01)
         assert count == 0
-        assert positions == []
+        assert snps == []
 
     def test_variants_above_threshold(self):
         record1 = MagicMock()
@@ -166,17 +167,17 @@ class TestCountSnpsInRegion:
         vcf = MagicMock()
         vcf.fetch.return_value = [record1, record2]
 
-        count, positions = _count_snps_in_region(vcf, "chr7", 1000, 1020, 0.01)
+        count, snps = _count_snps_in_region(vcf, "chr7", 1000, 1020, 0.01)
         assert count == 1
-        assert positions == [1005]
+        assert snps == [(1005, 0.05)]
 
     def test_contig_not_in_vcf(self):
         """ValueError from pysam when contig doesn't exist should be handled."""
         vcf = MagicMock()
         vcf.fetch.side_effect = ValueError("contig not found")
-        count, positions = _count_snps_in_region(vcf, "chrUn", 100, 200, 0.01)
+        count, snps = _count_snps_in_region(vcf, "chrUn", 100, 200, 0.01)
         assert count == 0
-        assert positions == []
+        assert snps == []
 
 
 # ---------------------------------------------------------------------------
@@ -207,12 +208,15 @@ class TestRunSnpCheck:
                 vcf_path="/fake/dbsnp.vcf.gz",
                 af_threshold=0.01,
                 snp_penalty_weight=5.0,
+                snp_3prime_window=5,
+                snp_3prime_multiplier=3.0,
             )
 
         # Each primer gets 1 SNP -> pair gets 2 SNPs
         assert pair.snp_count == 2
-        assert pair.snp_penalty == 10.0
-        assert pair.pair_penalty == original_penalty + 10.0
+        # Penalty is position-weighted (not simply count * weight)
+        assert pair.snp_penalty > 0
+        assert pair.pair_penalty == original_penalty + pair.snp_penalty
 
     def test_no_snps_no_penalty(self):
         """No SNPs means penalty unchanged."""
@@ -230,6 +234,8 @@ class TestRunSnpCheck:
                 vcf_path="/fake/dbsnp.vcf.gz",
                 af_threshold=0.01,
                 snp_penalty_weight=5.0,
+                snp_3prime_window=5,
+                snp_3prime_multiplier=3.0,
             )
 
         assert pair.snp_count == 0
@@ -278,6 +284,8 @@ class TestRunSnpCheck:
                 vcf_path="/fake/dbsnp.vcf.gz",
                 af_threshold=0.01,
                 snp_penalty_weight=5.0,
+                snp_3prime_window=5,
+                snp_3prime_multiplier=3.0,
             )
 
         assert pair.pair_penalty == pair.snp_penalty
@@ -329,7 +337,9 @@ class TestSnpCheckConfig:
     def test_default_values(self):
         params = SnpCheckParameters()
         assert params.af_threshold == 0.01
-        assert params.snp_penalty_weight == 5.0
+        assert params.snp_penalty_weight == 10.0
+        assert params.snp_3prime_window == 5
+        assert params.snp_3prime_multiplier == 3.0
 
     def test_custom_values(self):
         params = SnpCheckParameters(af_threshold=0.05, snp_penalty_weight=10.0)
@@ -770,3 +780,113 @@ class TestFilterSnpPairs:
         assert j_mixed.primer_pairs[0].pair_id == "m_clean"
         assert len(j_dirty.primer_pairs) == 1
         assert j_dirty.primer_pairs[0].pair_id == "d2"
+
+
+# ---------------------------------------------------------------------------
+# Position-weighted SNP penalty
+# ---------------------------------------------------------------------------
+
+
+class TestCalcWeightedSnpPenalty:
+    """Tests for _calc_weighted_snp_penalty with position-aware weighting."""
+
+    def test_forward_primer_snp_at_3prime_end(self):
+        """Forward primer (start=100, length=20): 3' at pos 119. SNP at 119 -> dist=0, boosted."""
+        snps = [(119, 0.05)]
+        penalty = _calc_weighted_snp_penalty(
+            snps, primer_genomic_start=100, primer_length=20,
+            orientation="forward", base_weight=10.0,
+            three_prime_window=5, three_prime_multiplier=3.0,
+        )
+        assert penalty == 10.0 * 3.0  # Boosted
+
+    def test_forward_primer_snp_within_window(self):
+        """SNP at pos 115 -> dist=4 from 3', within window, boosted."""
+        snps = [(115, 0.05)]
+        penalty = _calc_weighted_snp_penalty(
+            snps, primer_genomic_start=100, primer_length=20,
+            orientation="forward", base_weight=10.0,
+            three_prime_window=5, three_prime_multiplier=3.0,
+        )
+        assert penalty == 10.0 * 3.0
+
+    def test_forward_primer_snp_outside_window(self):
+        """SNP at pos 114 -> dist=5 from 3', outside window, base weight."""
+        snps = [(114, 0.05)]
+        penalty = _calc_weighted_snp_penalty(
+            snps, primer_genomic_start=100, primer_length=20,
+            orientation="forward", base_weight=10.0,
+            three_prime_window=5, three_prime_multiplier=3.0,
+        )
+        assert penalty == 10.0 * 1.0
+
+    def test_forward_primer_snp_at_5prime_end(self):
+        """SNP at pos 100 -> dist=19 from 3', base weight."""
+        snps = [(100, 0.05)]
+        penalty = _calc_weighted_snp_penalty(
+            snps, primer_genomic_start=100, primer_length=20,
+            orientation="forward", base_weight=10.0,
+            three_prime_window=5, three_prime_multiplier=3.0,
+        )
+        assert penalty == 10.0 * 1.0
+
+    def test_reverse_primer_snp_at_3prime_end(self):
+        """Reverse primer (start=200, length=20): 3' at pos 200. SNP at 200 -> dist=0, boosted."""
+        snps = [(200, 0.05)]
+        penalty = _calc_weighted_snp_penalty(
+            snps, primer_genomic_start=200, primer_length=20,
+            orientation="reverse", base_weight=10.0,
+            three_prime_window=5, three_prime_multiplier=3.0,
+        )
+        assert penalty == 10.0 * 3.0
+
+    def test_reverse_primer_snp_within_window(self):
+        """SNP at pos 204 -> dist=4 from 3', within window, boosted."""
+        snps = [(204, 0.05)]
+        penalty = _calc_weighted_snp_penalty(
+            snps, primer_genomic_start=200, primer_length=20,
+            orientation="reverse", base_weight=10.0,
+            three_prime_window=5, three_prime_multiplier=3.0,
+        )
+        assert penalty == 10.0 * 3.0
+
+    def test_reverse_primer_snp_outside_window(self):
+        """SNP at pos 205 -> dist=5 from 3', outside window, base weight."""
+        snps = [(205, 0.05)]
+        penalty = _calc_weighted_snp_penalty(
+            snps, primer_genomic_start=200, primer_length=20,
+            orientation="reverse", base_weight=10.0,
+            three_prime_window=5, three_prime_multiplier=3.0,
+        )
+        assert penalty == 10.0 * 1.0
+
+    def test_reverse_primer_snp_at_5prime_end(self):
+        """SNP at pos 219 -> dist=19 from 3', base weight."""
+        snps = [(219, 0.05)]
+        penalty = _calc_weighted_snp_penalty(
+            snps, primer_genomic_start=200, primer_length=20,
+            orientation="reverse", base_weight=10.0,
+            three_prime_window=5, three_prime_multiplier=3.0,
+        )
+        assert penalty == 10.0 * 1.0
+
+    def test_multiple_snps_summed(self):
+        """Total penalty reflects sum of position-weighted penalties."""
+        # Forward primer: start=100, length=20, 3' at 119
+        # SNP at 119 (dist=0, boosted) + SNP at 100 (dist=19, base)
+        snps = [(119, 0.05), (100, 0.02)]
+        penalty = _calc_weighted_snp_penalty(
+            snps, primer_genomic_start=100, primer_length=20,
+            orientation="forward", base_weight=10.0,
+            three_prime_window=5, three_prime_multiplier=3.0,
+        )
+        assert penalty == (10.0 * 3.0) + (10.0 * 1.0)
+
+    def test_empty_snps(self):
+        """No SNPs -> zero penalty."""
+        penalty = _calc_weighted_snp_penalty(
+            [], primer_genomic_start=100, primer_length=20,
+            orientation="forward", base_weight=10.0,
+            three_prime_window=5, three_prime_multiplier=3.0,
+        )
+        assert penalty == 0.0

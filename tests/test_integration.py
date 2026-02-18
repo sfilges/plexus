@@ -9,9 +9,17 @@ Skip integration tests:      pytest -m "not integration"
 
 from __future__ import annotations
 
+import shutil
+
 import pytest
 
 from plexus.pipeline import run_pipeline
+
+# Check if BLAST+ tools are available on PATH
+_BLAST_AVAILABLE = all(
+    shutil.which(tool) is not None
+    for tool in ("blastn", "makeblastdb", "blast_formatter")
+)
 
 pytestmark = pytest.mark.integration
 
@@ -121,3 +129,43 @@ class TestPipelineSkipSnpcheck:
         assert result.success is True
         assert "snp_check_skipped" in result.steps_completed
         assert "snp_checked" not in result.steps_completed
+
+
+@pytest.mark.skipif(not _BLAST_AVAILABLE, reason="BLAST+ tools not found on PATH")
+class TestFullPipelineWithBlast:
+    """Integration tests with BLAST specificity check enabled.
+
+    Requires BLAST+ (blastn, makeblastdb, blast_formatter) on PATH.
+    Skipped automatically when not available.
+    """
+
+    @pytest.fixture(scope="class")
+    def blast_pipeline_result(self, fixture_csv, fixture_fasta, fixture_vcf, tmp_path_factory):
+        tmp_dir = tmp_path_factory.mktemp("blast_integration")
+        result = run_pipeline(
+            input_file=fixture_csv,
+            fasta_file=fixture_fasta,
+            output_dir=tmp_dir,
+            panel_name="blast_test",
+            run_blast=True,
+            snp_vcf=fixture_vcf,
+            padding=200,
+        )
+        return result
+
+    def test_blast_step_completed(self, blast_pipeline_result):
+        assert "specificity_checked" in blast_pipeline_result.steps_completed
+
+    def test_specificity_checked_flag(self, blast_pipeline_result):
+        for junction in blast_pipeline_result.panel.junctions:
+            for pair in junction.primer_pairs:
+                assert pair.specificity_checked is True
+
+    def test_blast_output_files(self, blast_pipeline_result):
+        blast_dir = blast_pipeline_result.output_dir / "blast"
+        assert blast_dir.exists()
+        assert (blast_dir / "all_primers.fasta").exists()
+
+    def test_selected_pairs_have_off_target_info(self, blast_pipeline_result):
+        for pair in blast_pipeline_result.selected_pairs:
+            assert isinstance(pair.off_target_products, list)

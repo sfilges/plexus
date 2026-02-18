@@ -96,13 +96,7 @@ def run_specificity_check(panel: MultiplexPanel, work_dir: str, genome_fasta: st
 
             off_targets = []
             for prod in potential_products:
-                is_intended = False
-                if prod["chrom"] == junction.chrom:
-                    # Heuristic: match length
-                    if abs(prod["product_bp"] - pair.amplicon_length) < 10:
-                        is_intended = True
-
-                if not is_intended:
+                if not _is_on_target(prod, junction, pair):
                     off_targets.append(prod)
 
             pair.off_target_products = off_targets
@@ -113,3 +107,29 @@ def run_specificity_check(panel: MultiplexPanel, work_dir: str, genome_fasta: st
                 )
 
     logger.info("Specificity check complete.")
+
+
+def _is_on_target(prod: dict, junction, pair) -> bool:
+    """Check if a BLAST amplicon overlaps the intended target region.
+
+    Compares the BLAST hit genomic coordinates against the expected
+    primer binding positions derived from the junction's design region.
+    """
+    if prod["chrom"] != junction.chrom:
+        return False
+
+    # Expected genomic positions of this primer pair
+    design_start = getattr(junction, "design_start", None) or 0
+    expected_fwd_start = design_start + pair.forward.start
+    expected_rev_start = design_start + pair.reverse.start
+
+    # BLAST hit positions from AmpliconFinder
+    blast_fwd_start = prod["F_start"]
+    blast_rev_start = prod["R_start"]
+
+    # Allow small tolerance for BLAST coordinate alignment differences
+    tolerance = 5  # bp
+    fwd_match = abs(blast_fwd_start - expected_fwd_start) <= tolerance
+    rev_match = abs(blast_rev_start - expected_rev_start) <= tolerance
+
+    return fwd_match and rev_match

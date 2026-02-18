@@ -61,6 +61,39 @@ class TestBruteForce:
         assert len(results) == 4  # 2 pairs x 2 pairs = 4 combos
         assert all(isinstance(m, Multiplex) for m in results)
 
+    def test_store_maximum_respected(self, selector_inputs):
+        """Verify buffer doesn't grow beyond store_maximum."""
+        df, cost_fn = selector_inputs
+        results = BruteForce(df, cost_fn).run(store_maximum=2)
+        assert len(results) <= 2  # 4 combos, only 2 stored
+
+    def test_store_maximum_replacement_path(self):
+        """Larger fixture to exercise the replacement path properly."""
+        # 3 targets x 3 pairs = 27 combos
+        df = pd.DataFrame(
+            {
+                "target_id": ["T1"] * 3 + ["T2"] * 3 + ["T3"] * 3,
+                "pair_name": [
+                    "P1a", "P1b", "P1c",
+                    "P2a", "P2b", "P2c",
+                    "P3a", "P3b", "P3c",
+                ],
+            }
+        )
+        # Assign varying costs so the replacement path is exercised
+        call_count = [0]
+
+        def varying_cost(pairs):
+            call_count[0] += 1
+            return float(call_count[0] % 7)  # Cycles 1-6 then 0
+
+        cost_fn = MagicMock()
+        cost_fn.calc_cost = varying_cost
+
+        results = BruteForce(df, cost_fn).run(store_maximum=5)
+        assert len(results) <= 5
+        assert all(isinstance(m, Multiplex) for m in results)
+
 
 class TestSimulatedAnnealing:
     def test_returns_correct_number(self, selector_inputs):

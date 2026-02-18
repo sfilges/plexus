@@ -14,9 +14,7 @@ from plexus.config import (
     MultiplexPickerParameters,
     PCRConditions,
     PrimerPairParameters,
-    SaltCorrectionFormula,
     SingleplexDesignParameters,
-    ThermodynamicTable,
     load_config,
 )
 
@@ -144,24 +142,6 @@ class TestPCRConditions:
         conditions = PCRConditions()
         assert conditions.annealing_temperature == 60.0
         assert conditions.primer_concentration == 50.0
-        assert (
-            conditions.salt_correction_formula == SaltCorrectionFormula.SANTALUCIA1998
-        )
-        assert conditions.thermodynamic_table == ThermodynamicTable.SANTALUCIA1998
-
-    def test_enum_values(self):
-        """Test that enum values work correctly."""
-        conditions = PCRConditions(
-            salt_correction_formula="owczarzy2004",
-            thermodynamic_table="breslauer1986",
-        )
-        assert conditions.salt_correction_formula == SaltCorrectionFormula.OWCZARZY2004
-        assert conditions.thermodynamic_table == ThermodynamicTable.BRESLAUER1986
-
-    def test_invalid_enum_value(self):
-        """Test that invalid enum values raise ValidationError."""
-        with pytest.raises(ValidationError):
-            PCRConditions(salt_correction_formula="invalid_formula")
 
     def test_concentration_bounds(self):
         """Test that concentrations outside bounds raise ValidationError."""

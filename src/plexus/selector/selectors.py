@@ -136,9 +136,10 @@ class BruteForce(MultiplexSelector):
                 stored_costs.append(multiplex.cost)
                 highest_stored_cost = max(stored_costs)
             elif multiplex.cost < highest_stored_cost:
-                stored_multiplexes.insert(
-                    stored_costs.index(highest_stored_cost), multiplex
-                )
+                worst_idx = stored_costs.index(highest_stored_cost)
+                stored_multiplexes[worst_idx] = multiplex
+                stored_costs[worst_idx] = multiplex.cost
+                highest_stored_cost = max(stored_costs)
 
             if (ix + 1) % max(1, total_N // 10) == 0:
                 logger.debug(f"Brute force: {ix + 1}/{total_N} iterations complete")

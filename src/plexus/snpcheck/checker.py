@@ -49,7 +49,7 @@ def _get_allele_frequency(record):
 
 
 def _count_snps_in_region(vcf, chrom, start, end, af_threshold):
-    """Count variants with AF >= af_threshold in a genomic region.
+    """Find variants with AF >= af_threshold in a genomic region.
 
     Parameters
     ----------
@@ -63,22 +63,56 @@ def _count_snps_in_region(vcf, chrom, start, end, af_threshold):
 
     Returns
     -------
-    tuple[int, list[int]]
-        (count, list of 1-based positions)
+    tuple[int, list[tuple[int, float]]]
+        (count, list of (1-based position, allele frequency) tuples)
     """
     count = 0
-    positions = []
+    snps = []
     try:
         # pysam.VariantFile.fetch uses 0-based half-open coordinates
         for record in vcf.fetch(chrom, start - 1, end - 1):
             af = _get_allele_frequency(record)
             if af is not None and af >= af_threshold:
                 count += 1
-                positions.append(record.pos)
+                snps.append((record.pos, af))
     except ValueError:
         # Contig not in VCF (e.g. alt contigs)
         pass
-    return count, positions
+    return count, snps
+
+
+def _calc_weighted_snp_penalty(
+    snps: list[tuple[int, float]],
+    primer_genomic_start: int,
+    primer_length: int,
+    orientation: str,
+    base_weight: float,
+    three_prime_window: int,
+    three_prime_multiplier: float,
+) -> float:
+    """Weight SNP penalties by proximity to the primer's 3' end.
+
+    Coordinate logic (verified against design.py k-mer generation):
+    - Forward primer: 5'->3' runs left-to-right on forward strand
+      3' end genomic pos = genomic_start + length - 1
+      dist_from_3prime = (genomic_start + length - 1) - snp_pos
+    - Reverse primer: 5'->3' runs right-to-left on forward strand
+      3' end genomic pos = genomic_start (the leftmost coordinate)
+      dist_from_3prime = snp_pos - genomic_start
+    """
+    penalty = 0.0
+    for snp_pos, _af in snps:
+        if orientation == "forward":
+            dist_from_3prime = (primer_genomic_start + primer_length - 1) - snp_pos
+        else:
+            dist_from_3prime = snp_pos - primer_genomic_start
+
+        # Clamp to valid range (BLAST coords may be slightly off)
+        dist_from_3prime = max(0, dist_from_3prime)
+
+        multiplier = three_prime_multiplier if dist_from_3prime < three_prime_window else 1.0
+        penalty += base_weight * multiplier
+    return penalty
 
 
 def run_snp_check(
@@ -87,6 +121,8 @@ def run_snp_check(
     af_threshold: float = 0.01,
     *,
     snp_penalty_weight: float,
+    snp_3prime_window: int = 5,
+    snp_3prime_multiplier: float = 3.0,
 ) -> None:
     """Check all primer pairs in the panel for SNP overlaps using a local VCF.
 
@@ -103,12 +139,19 @@ def run_snp_check(
     af_threshold : float
         Minimum allele frequency (default 0.01 = 1%).
     snp_penalty_weight : float
-        Penalty per SNP (default 5.0).
+        Base penalty per SNP.
+    snp_3prime_window : int
+        Number of bases from 3' end considered high-impact (default 5).
+    snp_3prime_multiplier : float
+        Penalty multiplier for SNPs within the 3' window (default 3.0).
     """
     import pysam
 
     logger.info(f"Running SNP check with VCF: {vcf_path}")
     logger.info(f"AF threshold: {af_threshold}, penalty weight: {snp_penalty_weight}")
+    logger.info(
+        f"3' window: {snp_3prime_window} bp, 3' multiplier: {snp_3prime_multiplier}x"
+    )
 
     with pysam.VariantFile(vcf_path) as vcf:
         total_snps = 0
@@ -125,10 +168,11 @@ def run_snp_check(
 
             for pair in junction.primer_pairs:
                 pair_snp_count = 0
+                pair_snp_penalty = 0.0
 
                 for primer in (pair.forward, pair.reverse):
                     chrom, gstart, gend = _primer_genomic_coords(primer, junction)
-                    count, positions = _count_snps_in_region(
+                    count, snps = _count_snps_in_region(
                         vcf, chrom, gstart, gend, af_threshold
                     )
 
@@ -138,12 +182,26 @@ def run_snp_check(
                     if count > 0:
                         primers_with_snps += 1
                         total_snps += count
+                        orientation = (
+                            "forward" if primer.direction == "forward" else "reverse"
+                        )
+                        penalty = _calc_weighted_snp_penalty(
+                            snps=snps,
+                            primer_genomic_start=gstart,
+                            primer_length=primer.length,
+                            orientation=orientation,
+                            base_weight=snp_penalty_weight,
+                            three_prime_window=snp_3prime_window,
+                            three_prime_multiplier=snp_3prime_multiplier,
+                        )
+                        pair_snp_penalty += penalty
+                        positions = [pos for pos, _ in snps]
                         logger.debug(
                             f"Primer {primer.name}: {count} SNPs at positions {positions}"
                         )
 
                 pair.snp_count = pair_snp_count
-                pair.snp_penalty = pair_snp_count * snp_penalty_weight
+                pair.snp_penalty = pair_snp_penalty
 
                 if pair.snp_penalty > 0:
                     if pair.pair_penalty is not None:

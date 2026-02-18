@@ -19,7 +19,7 @@
         "PRIMER_OPT_GC_PERCENT": 50.0,
         "primer_min_gc": 30,
         "primer_max_gc": 70,
-        "primer_gc_clamp": 0,
+        "primer_gc_clamp": 1,
         "primer_max_poly_x": 5,
         "primer_max_n": 0,
         "PRIMER_MAX_SELF_ANY_TH": 45.0,
@@ -60,13 +60,13 @@
         "dv_concentration": 1.5,
         "dmso_concentration": 0.0,
         "dmso_fact": 0.6,
-        "formamide_concentration": 0.0,
-        "salt_correction_formula": "santalucia1998",
-        "thermodynamic_table": "santalucia1998"
+        "formamide_concentration": 0.0
     },
     "snp_check_parameters": {
         "af_threshold": 0.01,
-        "snp_penalty_weight": 5.0,
+        "snp_penalty_weight": 10.0,
+        "snp_3prime_window": 5,
+        "snp_3prime_multiplier": 3.0,
         "snp_strict": false
     },
     "multiplex_picker_parameters": {

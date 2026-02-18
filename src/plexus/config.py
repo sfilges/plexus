@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import json
-from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
 
@@ -18,21 +17,6 @@ from loguru import logger
 from pydantic import BaseModel, Field, model_validator
 
 from plexus.utils.root_dir import ROOT_DIR
-
-
-class SaltCorrectionFormula(str, Enum):
-    """Supported salt correction formulas for Tm calculation."""
-
-    SANTALUCIA1998 = "santalucia1998"
-    OWCZARZY2004 = "owczarzy2004"
-    SCHILDKRAUT1965 = "schildkraut1965"
-
-
-class ThermodynamicTable(str, Enum):
-    """Supported thermodynamic tables for Tm calculation."""
-
-    SANTALUCIA1998 = "santalucia1998"
-    BRESLAUER1986 = "breslauer1986"
 
 
 class SingleplexDesignParameters(BaseModel):
@@ -78,7 +62,10 @@ class SingleplexDesignParameters(BaseModel):
     PRIMER_OPT_GC_PERCENT: float = Field(default=50.0, ge=20.0, le=80.0)
     primer_min_gc: int = Field(default=30, ge=0, le=100)
     primer_max_gc: int = Field(default=70, ge=0, le=100)
-    primer_gc_clamp: int = Field(default=0, ge=0, le=5)
+    primer_gc_clamp: int = Field(
+        default=0, ge=0, le=5,
+        description="Enable 3' GC clamp filter (0=off, 1=on). Requires 1-3 G/C in last 5 bases.",
+    )
 
     # Sequence composition constraints
     primer_max_poly_x: int = Field(default=5, ge=1, le=10)
@@ -175,13 +162,6 @@ class PCRConditions(BaseModel):
     dmso_fact: float = Field(default=0.6, ge=0.0, le=1.0)
     formamide_concentration: float = Field(default=0.8, ge=0.0, le=10.0)  # M
 
-    salt_correction_formula: SaltCorrectionFormula = Field(
-        default=SaltCorrectionFormula.SANTALUCIA1998
-    )
-    thermodynamic_table: ThermodynamicTable = Field(
-        default=ThermodynamicTable.SANTALUCIA1998
-    )
-
 
 class MultiplexPickerParameters(BaseModel):
     """Parameters for multiplex panel optimization."""
@@ -222,7 +202,15 @@ class SnpCheckParameters(BaseModel):
         default=0.01, ge=0.0, le=1.0, description="Minimum allele frequency to flag"
     )
     snp_penalty_weight: float = Field(
-        default=5.0, ge=0.0, description="Penalty per SNP overlapping a primer"
+        default=10.0, ge=0.0, description="Base penalty per SNP overlapping a primer"
+    )
+    snp_3prime_window: int = Field(
+        default=5, ge=1, le=15,
+        description="Number of bases from 3' end considered high-impact",
+    )
+    snp_3prime_multiplier: float = Field(
+        default=3.0, ge=1.0,
+        description="Penalty multiplier for SNPs within the 3' window",
     )
     snp_strict: bool = Field(
         default=False,

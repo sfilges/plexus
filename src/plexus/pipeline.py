@@ -36,6 +36,7 @@ class PipelineResult:
     errors: list[str] = field(default_factory=list)
     multiplex_solutions: list = field(default_factory=list)
     selected_pairs: list = field(default_factory=list)
+    failed_junctions: list = field(default_factory=list)
 
     @property
     def success(self) -> bool:
@@ -221,6 +222,20 @@ def run_pipeline(
         panel = design_primers(panel, method=design_method)
         result.steps_completed.append("primers_designed")
 
+        # Capture any junctions that failed during design
+        if hasattr(panel, "failed_junctions") and panel.failed_junctions:
+            result.failed_junctions = panel.failed_junctions
+            for fj in panel.failed_junctions:
+                err_msg = getattr(fj, "_design_error", "no valid primer pairs")
+                result.errors.append(
+                    f"Junction '{fj.name}' failed primer design: {err_msg}"
+                )
+
+        if not panel.junctions:
+            logger.error("All junctions failed primer design. Cannot continue.")
+            result.errors.append("All junctions failed primer design.")
+            return result
+
         total_pairs = sum(
             len(j.primer_pairs) for j in panel.junctions if j.primer_pairs
         )
@@ -276,6 +291,8 @@ def run_pipeline(
                 vcf_path=str(resolved_vcf),
                 af_threshold=af_thresh,
                 snp_penalty_weight=snp_config.snp_penalty_weight,
+                snp_3prime_window=snp_config.snp_3prime_window,
+                snp_3prime_multiplier=snp_config.snp_3prime_multiplier,
             )
             result.steps_completed.append("snp_checked")
 
@@ -410,6 +427,27 @@ def run_pipeline(
             str(output_dir / "panel_summary.json"),
             result,
         )
+
+        # Failed junctions report
+        if result.failed_junctions:
+            import pandas as pd
+
+            rows = [
+                {
+                    "Junction": fj.name,
+                    "Chrom": fj.chrom,
+                    "Start": fj.start,
+                    "End": fj.end,
+                    "Error": getattr(fj, "_design_error", "unknown"),
+                }
+                for fj in result.failed_junctions
+            ]
+            pd.DataFrame(rows).to_csv(
+                output_dir / "failed_junctions.csv", index=False
+            )
+            logger.info(
+                f"Wrote {len(rows)} failed junction(s) to failed_junctions.csv"
+            )
 
         result.steps_completed.append("final_results_saved")
     except Exception as e:
