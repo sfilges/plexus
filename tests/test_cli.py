@@ -69,11 +69,14 @@ class TestRunCommand:
         )  # Typer uses exit code 2 for missing required options
         assert "Missing option" in result.output or "--input" in result.output
 
-    def test_run_missing_fasta(self):
-        """Test that run fails without --fasta."""
-        result = runner.invoke(app, ["run", "--input", "junctions.csv"])
-        assert result.exit_code == 2
-        assert "Missing option" in result.output or "--fasta" in result.output
+    def test_run_missing_fasta_no_registry(self):
+        """Test that run fails without --fasta when genome is not in registry."""
+        from unittest.mock import patch
+
+        with patch("plexus.resources.get_registered_fasta", return_value=None):
+            result = runner.invoke(app, ["run", "--input", "junctions.csv"])
+        assert result.exit_code == 1
+        assert "not initialized" in result.output or "plexus init" in result.output
 
     def test_run_input_file_not_found(self):
         """Test that run fails with non-existent input file."""
@@ -354,6 +357,156 @@ class TestRunCommand:
         finally:
             Path(csv_path).unlink()
             Path(fasta_path).unlink()
+
+
+class TestInitCommand:
+    """Tests for the init command."""
+
+    def test_init_help(self):
+        """Test that init --help works."""
+        result = runner.invoke(app, ["init", "--help"], env={"COLUMNS": "120"})
+        output = strip_ansi(result.output)
+        assert result.exit_code == 0
+        assert "--genome" in output
+        assert "--fasta" in output
+        assert "--skip-blast" in output
+
+    def test_init_unknown_genome(self):
+        """Test that init rejects an unknown genome."""
+        result = runner.invoke(app, ["init", "--genome", "mm10_nonexistent"])
+        assert result.exit_code == 1
+        assert "Unknown genome" in (result.output + (result.stderr or ""))
+
+    @patch("plexus.resources.init_genome")
+    @patch("plexus.resources.genome_status")
+    def test_init_with_local_fasta_and_vcf(self, mock_status, mock_init):
+        """Test init with local FASTA and VCF skips downloads."""
+        mock_status.return_value = {
+            "fasta": True,
+            "fai": True,
+            "blast_db": True,
+            "snp_vcf": True,
+        }
+
+        with tempfile.NamedTemporaryFile(suffix=".fa", delete=False) as fa_f:
+            fasta_path = fa_f.name
+            fa_f.write(b">chr1\nACGT\n")
+
+        with tempfile.NamedTemporaryFile(suffix=".vcf.gz", delete=False) as vcf_f:
+            vcf_path = vcf_f.name
+
+        try:
+            result = runner.invoke(
+                app,
+                [
+                    "init",
+                    "--genome",
+                    "hg38",
+                    "--fasta",
+                    fasta_path,
+                    "--snp-vcf",
+                    vcf_path,
+                ],
+            )
+            assert result.exit_code == 0
+            assert "Done!" in strip_ansi(result.output)
+            mock_init.assert_called_once()
+            call_kwargs = mock_init.call_args[1]
+            assert call_kwargs["genome"] == "hg38"
+            assert str(call_kwargs["fasta"]) == fasta_path
+        finally:
+            Path(fasta_path).unlink()
+            Path(vcf_path).unlink()
+
+    @patch("plexus.resources.init_genome")
+    @patch("plexus.resources.genome_status")
+    def test_init_skip_flags(self, mock_status, mock_init):
+        """Test that --skip-blast and --skip-snp are passed through."""
+        mock_status.return_value = {
+            "fasta": True,
+            "fai": True,
+            "blast_db": False,
+            "snp_vcf": False,
+        }
+
+        with tempfile.NamedTemporaryFile(suffix=".fa", delete=False) as fa_f:
+            fasta_path = fa_f.name
+            fa_f.write(b">chr1\nACGT\n")
+
+        try:
+            result = runner.invoke(
+                app,
+                [
+                    "init",
+                    "--genome",
+                    "hg38",
+                    "--fasta",
+                    fasta_path,
+                    "--skip-blast",
+                    "--skip-snp",
+                ],
+            )
+            assert result.exit_code == 0
+            call_kwargs = mock_init.call_args[1]
+            assert call_kwargs["skip_blast"] is True
+            assert call_kwargs["skip_snp"] is True
+        finally:
+            Path(fasta_path).unlink()
+
+
+class TestRunRegistryFallback:
+    """Tests for the --fasta registry fallback in run."""
+
+    @patch("plexus.orchestrator.run_pipeline")
+    @patch("plexus.resources.get_registered_fasta")
+    def test_run_uses_registered_fasta(self, mock_get_fasta, mock_run_pipeline):
+        """Test that run uses the registered FASTA when --fasta is omitted."""
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(suffix=".fa", delete=False) as fa_f:
+            fasta_path = Path(fa_f.name)
+            fa_f.write(b">chr1\nACGT\n")
+
+        mock_get_fasta.return_value = fasta_path
+
+        mock_panel = MagicMock()
+        mock_panel.junctions = []
+        mock_result = PipelineResult(
+            panel=mock_panel,
+            output_dir=Path("/tmp/output"),
+            config=MagicMock(),
+            steps_completed=[],
+            errors=[],
+        )
+        mock_run_pipeline.return_value = mock_result
+
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as csv_f:
+            csv_path = csv_f.name
+            csv_f.write(b"Name,Chrom,Position\n")
+
+        try:
+            result = runner.invoke(app, ["run", "--input", csv_path])
+            assert result.exit_code == 0
+            mock_get_fasta.assert_called_once_with("hg38")
+            call_kwargs = mock_run_pipeline.call_args[1]
+            assert call_kwargs["fasta_file"] == fasta_path
+        finally:
+            fasta_path.unlink()
+            Path(csv_path).unlink()
+
+    @patch("plexus.resources.get_registered_fasta", return_value=None)
+    def test_run_no_fasta_no_registry_exits(self, _mock):
+        """Test run exits with error when --fasta omitted and genome not registered."""
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as csv_f:
+            csv_path = csv_f.name
+            csv_f.write(b"Name,Chrom,Position\n")
+        try:
+            result = runner.invoke(app, ["run", "--input", csv_path])
+            assert result.exit_code == 1
+            combined = strip_ansi(result.output)
+            assert "not initialized" in combined or "plexus init" in combined
+        finally:
+            Path(csv_path).unlink()
 
 
 class TestCLIShortFlags:

@@ -113,7 +113,7 @@ Use `--snp-strict` to discard any primer pair that overlaps a SNP above the AF t
 ### Key Options
 
 | Option | Default | Description |
-|---|---|---|
+| --- | --- | --- |
 | `-i, --input` | required | Path to input CSV file |
 | `-f, --fasta` | required | Path to reference genome FASTA |
 | `-o, --output` | `./output` | Output directory |
@@ -135,4 +135,61 @@ Run `plexus --help` for a full list of commands and options.
 
 ## Configuration
 
-The design parameters (melting temperature, primer length, penalties, etc.) are controlled via configuration files in the `config/` directory. You can supply a custom JSON config file using the `--config` option.
+Design parameters are controlled via JSON config files. Use `--config` to supply your own, or `--preset` to choose a built-in starting point (`default` or `lenient`).
+
+**Partial configs are fully supported** — you only need to include the parameters you want to change. Any omitted parameter falls back to the preset default.
+
+### Config file structure
+
+The config is divided into five sections:
+
+| Section | Controls |
+| --- | --- |
+| `singleplex_design_parameters` | Primer length, Tm, GC%, thermodynamic thresholds, adapter tails |
+| `primer_pair_parameters` | Amplicon size, Tm difference, pair penalty weights |
+| `pcr_conditions` | Salt concentrations, annealing temperature, thermodynamic tables |
+| `snp_check_parameters` | AF threshold, SNP penalty weight, strict mode |
+| `multiplex_picker_parameters` | Plexity targets, optimization weights, selector settings |
+
+### Minimal override example
+
+To widen the Tm window and use a stricter cross-dimer weight, create a file such as `my_config.json`:
+
+```json
+{
+    "singleplex_design_parameters": {
+        "PRIMER_MIN_TM": 55.0,
+        "PRIMER_MAX_TM": 66.0
+    },
+    "multiplex_picker_parameters": {
+        "wt_cross_dimer": 3.0
+    }
+}
+```
+
+Then run:
+
+```bash
+plexus run -i junctions.csv -f genome.fa --config my_config.json
+```
+
+All parameters not listed in your file are inherited from the `default` preset.
+
+### Adapter tail sequences
+
+`forward_tail` and `reverse_tail` set the adapter sequences prepended to each primer (at the 5′ end). The defaults are SiMSen-Seq-style adapters. Override them in `singleplex_design_parameters`:
+
+```json
+{
+    "singleplex_design_parameters": {
+        "forward_tail": "ACACTCTTTCCCTACACGACGCTCTTCCGATCT",
+        "reverse_tail": "GTGACTGGAGTTCAGACGTGTGCTCTTCCGATCT"
+    }
+}
+```
+
+The full ready-to-order sequences (`tail + binding region`) are written to the `Forward_Full_Seq` / `Reverse_Full_Seq` columns in the output CSVs. Bare binding sequences are also retained in `Forward_Seq` / `Reverse_Seq`.
+
+### Viewing all available parameters
+
+The built-in preset files in `config/` list every available parameter with its default value and are a useful reference when building a custom config.

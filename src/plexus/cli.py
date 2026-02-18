@@ -66,13 +66,13 @@ def run(
         ),
     ],
     fasta_file: Annotated[
-        Path,
+        Path | None,
         typer.Option(
             "--fasta",
             "-f",
-            help="Path to reference genome FASTA file.",
+            help="Path to reference genome FASTA file. If omitted, uses registered genome from `plexus init`.",
         ),
-    ],
+    ] = None,
     output_dir: Annotated[
         Path,
         typer.Option(
@@ -190,6 +190,17 @@ def run(
     """
     from plexus.orchestrator import run_multi_panel
     from plexus.pipeline import MultiPanelResult
+    from plexus.resources import get_registered_fasta
+
+    if fasta_file is None:
+        fasta_file = get_registered_fasta(genome)
+        if fasta_file is None:
+            typer.echo(
+                f"--fasta is required: genome '{genome}' is not initialized.\n"
+                f"Run: plexus init --genome {genome}",
+                err=True,
+            )
+            raise typer.Exit(code=1)
 
     console.print("[bold green]Plexus[/bold green]")
     console.print(f"  Input:  {input_file}")
@@ -292,10 +303,128 @@ def download_resources(
 @app.command()
 def status() -> None:
     """Show Plexus version and resource status."""
+    from plexus.resources import GENOME_PRESETS, genome_status
     from plexus.snpcheck.resources import resource_status_message
 
     console.print(f"[bold green]Plexus[/bold green] version {__version__}")
     console.print(f"  {resource_status_message()}")
+    console.print()
+    console.print("[bold]Genome resources:[/bold]")
+    for g in GENOME_PRESETS:
+        s = genome_status(g)
+        marks = {True: "[green]✓[/green]", False: "[red]✗[/red]"}
+        console.print(
+            f"  {g}:"
+            f"  FASTA {marks[s['fasta']]}"
+            f"  FAI {marks[s['fai']]}"
+            f"  BLAST {marks[s['blast_db']]}"
+            f"  gnomAD VCF {marks[s['snp_vcf']]}"
+        )
+
+
+@app.command()
+def init(
+    genome: Annotated[
+        str,
+        typer.Option(
+            "--genome",
+            "-g",
+            help="Reference genome to initialize (e.g. hg38).",
+        ),
+    ] = "hg38",
+    fasta: Annotated[
+        Path | None,
+        typer.Option(
+            "--fasta",
+            "-f",
+            help="Use a local FASTA instead of downloading.",
+        ),
+    ] = None,
+    snp_vcf: Annotated[
+        Path | None,
+        typer.Option(
+            "--snp-vcf",
+            help="Use a local gnomAD VCF instead of downloading.",
+        ),
+    ] = None,
+    skip_blast: Annotated[
+        bool,
+        typer.Option("--skip-blast", help="Skip BLAST index creation."),
+    ] = False,
+    skip_snp: Annotated[
+        bool,
+        typer.Option("--skip-snp", help="Skip SNP VCF download/registration."),
+    ] = False,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force", help="Re-download and rebuild even if resources exist."
+        ),
+    ] = False,
+) -> None:
+    """Download and index reference resources for a genome.
+
+    Provide --fasta / --snp-vcf to use local files instead of downloading.
+    """
+    from plexus.resources import GENOME_PRESETS, genome_status, init_genome
+
+    if genome not in GENOME_PRESETS:
+        supported = ", ".join(GENOME_PRESETS)
+        typer.echo(
+            f"Unknown genome '{genome}'. Supported genomes: {supported}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    preset = GENOME_PRESETS[genome]
+    console.print(
+        f"[bold green]Plexus[/bold green] — initializing resources for [bold]{genome}[/bold]"
+    )
+    if fasta:
+        console.print(f"  FASTA:   {fasta} (local)")
+    else:
+        console.print(f"  FASTA:   {preset['fasta_size_note']} — downloading from UCSC")
+    if snp_vcf:
+        console.print(f"  SNP VCF: {snp_vcf} (local)")
+    elif not skip_snp:
+        console.print("  SNP VCF: downloading gnomAD AF-only VCF from GATK bucket")
+    console.print()
+
+    try:
+        init_genome(
+            genome=genome,
+            fasta=fasta,
+            snp_vcf=snp_vcf,
+            force=force,
+            skip_blast=skip_blast,
+            skip_snp=skip_snp,
+        )
+    except ValueError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    except FileNotFoundError as e:
+        console.print(f"[bold red]Error: {e}[/bold red]")
+        raise typer.Exit(code=1) from e
+    except RuntimeError as e:
+        console.print(f"[bold red]Error: {e}[/bold red]")
+        raise typer.Exit(code=1) from e
+    except Exception as e:
+        console.print(f"[bold red]Init failed: {e}[/bold red]")
+        raise typer.Exit(code=1) from e
+
+    console.print()
+    s = genome_status(genome)
+    console.print(
+        f"[bold green]Done![/bold green] Resources for [bold]{genome}[/bold]:"
+    )
+    console.print(f"  FASTA:   {'ready' if s['fasta'] else 'NOT ready'}")
+    console.print(f"  FAI:     {'ready' if s['fai'] else 'NOT ready'}")
+    console.print(
+        f"  BLAST:   {'ready' if s['blast_db'] else ('NOT ready' if not skip_blast else 'skipped')}"
+    )
+    console.print(
+        f"  gnomAD:  {'ready' if s['snp_vcf'] else ('NOT ready' if not skip_snp else 'skipped')}"
+    )
 
 
 if __name__ == "__main__":
