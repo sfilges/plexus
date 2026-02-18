@@ -153,3 +153,55 @@ def run_snp_check(
     logger.info(
         f"SNP check complete: {total_snps} SNPs found across {primers_with_snps} primers"
     )
+
+
+def filter_snp_pairs(panel: MultiplexPanel) -> int:
+    """Remove primer pairs that overlap any SNP (snp_count > 0).
+
+    For each junction, pairs with ``snp_count == 0`` are kept.  If *all*
+    pairs for a junction have SNPs, the single pair with the lowest
+    ``snp_count`` is retained so the junction is not lost from the panel.
+
+    Parameters
+    ----------
+    panel : MultiplexPanel
+        Panel whose junctions have already been through ``run_snp_check``.
+
+    Returns
+    -------
+    int
+        Total number of primer pairs removed across all junctions.
+    """
+    total_removed = 0
+
+    for junction in panel.junctions:
+        if not junction.primer_pairs:
+            continue
+
+        clean = [p for p in junction.primer_pairs if p.snp_count == 0]
+        dirty = [p for p in junction.primer_pairs if p.snp_count > 0]
+
+        if not dirty:
+            # Nothing to remove
+            continue
+
+        if clean:
+            removed = len(dirty)
+            junction.primer_pairs = clean
+            logger.info(
+                f"Junction {junction.name}: removed {removed} primer pair(s) "
+                f"overlapping SNPs, {len(clean)} clean pair(s) remain"
+            )
+        else:
+            # All pairs have SNPs — keep the least affected one
+            best = min(junction.primer_pairs, key=lambda p: p.snp_count)
+            removed = len(junction.primer_pairs) - 1
+            junction.primer_pairs = [best]
+            logger.warning(
+                f"Junction {junction.name}: all pairs overlap SNPs; "
+                f"keeping pair {best.pair_id} with lowest snp_count={best.snp_count}"
+            )
+
+        total_removed += removed
+
+    return total_removed

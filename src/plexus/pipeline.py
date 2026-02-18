@@ -119,6 +119,7 @@ def run_pipeline(
     snp_vcf: str | Path | None = None,
     skip_snpcheck: bool = False,
     snp_af_threshold: float | None = None,
+    snp_strict: bool = False,
     selector: str = "Greedy",
 ) -> PipelineResult:
     """
@@ -282,6 +283,15 @@ def run_pipeline(
                 snp_penalty_weight=snp_config.snp_penalty_weight,
             )
             result.steps_completed.append("snp_checked")
+
+            if snp_strict:
+                from plexus.snpcheck.checker import filter_snp_pairs
+
+                n_removed = filter_snp_pairs(panel)
+                logger.info(
+                    f"SNP strict mode: removed {n_removed} primer pairs overlapping SNPs"
+                )
+                result.steps_completed.append("snp_strict_filtered")
         except Exception as e:
             logger.error(f"SNP check failed: {e}")
             result.errors.append(f"SNP check failed: {e}")

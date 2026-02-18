@@ -5,6 +5,15 @@ All notable changes to plexus will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 18-02-2026
+
+### Added
+
+- SNP strict mode: `--snp-strict` CLI flag and `snp_strict` config parameter that discards primer pairs overlapping any SNP above the AF threshold before multiplex optimization.
+- `filter_snp_pairs()` function in `checker.py` that removes SNP-overlapping pairs per junction, with a fallback to keep the least-affected pair when all pairs have SNPs.
+- `snp_strict` field on `SnpCheckParameters` (default `False`).
+- 5 new tests for the SNP strict filtering logic.
+
 ## [0.3.0] - 18-02-2026
 
 ### Added

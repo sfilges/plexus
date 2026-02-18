@@ -9,6 +9,8 @@ __pycache__/
 *.DS_STORE
 .out/
 
+.claude/
+output*/
 CLAUDE.md
 GEMINI.md
 

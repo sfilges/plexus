@@ -224,6 +224,10 @@ class SnpCheckParameters(BaseModel):
     snp_penalty_weight: float = Field(
         default=5.0, ge=0.0, description="Penalty per SNP overlapping a primer"
     )
+    snp_strict: bool = Field(
+        default=False,
+        description="Discard primer pairs overlapping any SNP above af_threshold",
+    )
 
 
 class DesignerConfig(BaseModel):

@@ -162,6 +162,13 @@ def run(
             help="Minimum allele frequency for SNP flagging (default: 0.01).",
         ),
     ] = None,
+    snp_strict: Annotated[
+        bool,
+        typer.Option(
+            "--snp-strict",
+            help="Discard primer pairs that overlap SNPs.",
+        ),
+    ] = False,
     selector: Annotated[
         str,
         typer.Option(
@@ -206,6 +213,7 @@ def run(
             snp_vcf=snp_vcf,
             skip_snpcheck=skip_snpcheck,
             snp_af_threshold=snp_af_threshold,
+            snp_strict=snp_strict,
             selector=selector,
         )
 

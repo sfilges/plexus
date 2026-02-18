@@ -15,6 +15,7 @@ from plexus.snpcheck.checker import (
     _count_snps_in_region,
     _get_allele_frequency,
     _primer_genomic_coords,
+    filter_snp_pairs,
     run_snp_check,
 )
 from plexus.snpcheck.resources import (
@@ -44,18 +45,27 @@ def _make_primer(name="test_fwd", direction="forward", start=10, length=20):
     )
 
 
-def _make_pair(fwd_start=10, fwd_len=20, rev_start=50, rev_len=20):
+def _make_pair(
+    fwd_start=10,
+    fwd_len=20,
+    rev_start=50,
+    rev_len=20,
+    pair_id="test_pair_0",
+    snp_count=0,
+):
     fwd = _make_primer("fwd", "forward", fwd_start, fwd_len)
     rev = _make_primer("rev", "reverse", rev_start, rev_len)
-    return PrimerPair(
+    pair = PrimerPair(
         forward=fwd,
         reverse=rev,
         insert_size=rev_start - (fwd_start + fwd_len),
         amplicon_sequence="A" * 80,
         amplicon_length=80,
         pair_penalty=1.0,
-        pair_id="test_pair_0",
+        pair_id=pair_id,
     )
+    pair.snp_count = snp_count
+    return pair
 
 
 def _make_junction(design_start=1000, chrom="chr7"):
@@ -643,3 +653,108 @@ class TestStatusCli:
         assert result.exit_code == 0
         assert "Plexus" in result.output
         assert "gnomAD VCF" in result.output
+
+
+# ---------------------------------------------------------------------------
+# filter_snp_pairs
+# ---------------------------------------------------------------------------
+
+
+class TestFilterSnpPairs:
+    def test_removes_snp_pairs(self):
+        """Junction with one clean and one dirty pair -> only clean remains."""
+        clean_pair = _make_pair(pair_id="clean_0", snp_count=0)
+        dirty_pair = _make_pair(pair_id="dirty_0", snp_count=2)
+        junction = _make_junction()
+        junction.primer_pairs = [clean_pair, dirty_pair]
+        panel = _make_panel([junction])
+
+        removed = filter_snp_pairs(panel)
+
+        assert removed == 1
+        assert len(panel.junctions[0].primer_pairs) == 1
+        assert panel.junctions[0].primer_pairs[0].pair_id == "clean_0"
+
+    def test_keeps_least_affected_when_all_dirty(self):
+        """When all pairs have SNPs, keep the one with lowest snp_count."""
+        pair_a = _make_pair(pair_id="pair_a", snp_count=3)
+        pair_b = _make_pair(pair_id="pair_b", snp_count=1)
+        pair_c = _make_pair(pair_id="pair_c", snp_count=5)
+        junction = _make_junction()
+        junction.primer_pairs = [pair_a, pair_b, pair_c]
+        panel = _make_panel([junction])
+
+        removed = filter_snp_pairs(panel)
+
+        assert removed == 2
+        assert len(panel.junctions[0].primer_pairs) == 1
+        assert panel.junctions[0].primer_pairs[0].pair_id == "pair_b"
+
+    def test_no_pairs_skipped(self):
+        """Junction with no primer pairs -> no error, zero removed."""
+        junction = _make_junction()
+        junction.primer_pairs = []
+        panel = _make_panel([junction])
+
+        removed = filter_snp_pairs(panel)
+
+        assert removed == 0
+
+    def test_returns_removal_count(self):
+        """Return value matches total pairs removed across junctions."""
+        # Junction 1: 1 clean + 2 dirty -> 2 removed
+        j1 = _make_junction()
+        j1.name = "J1"
+        j1.primer_pairs = [
+            _make_pair(pair_id="j1_clean", snp_count=0),
+            _make_pair(pair_id="j1_dirty1", snp_count=1),
+            _make_pair(pair_id="j1_dirty2", snp_count=3),
+        ]
+        # Junction 2: all dirty (3 pairs) -> 2 removed (keep best)
+        j2 = _make_junction()
+        j2.name = "J2"
+        j2.primer_pairs = [
+            _make_pair(pair_id="j2_a", snp_count=2),
+            _make_pair(pair_id="j2_b", snp_count=4),
+            _make_pair(pair_id="j2_c", snp_count=6),
+        ]
+        panel = _make_panel([j1, j2])
+
+        removed = filter_snp_pairs(panel)
+
+        assert removed == 4  # 2 from j1 + 2 from j2
+
+    def test_multiple_junctions_mixed(self):
+        """Mixed junctions: one all-clean, one mixed, one all-dirty."""
+        # All clean — no filtering
+        j_clean = _make_junction()
+        j_clean.name = "J_CLEAN"
+        j_clean.primer_pairs = [
+            _make_pair(pair_id="c1", snp_count=0),
+            _make_pair(pair_id="c2", snp_count=0),
+        ]
+        # Mixed — dirty removed
+        j_mixed = _make_junction()
+        j_mixed.name = "J_MIXED"
+        j_mixed.primer_pairs = [
+            _make_pair(pair_id="m_clean", snp_count=0),
+            _make_pair(pair_id="m_dirty", snp_count=1),
+        ]
+        # All dirty — keep least affected
+        j_dirty = _make_junction()
+        j_dirty.name = "J_DIRTY"
+        j_dirty.primer_pairs = [
+            _make_pair(pair_id="d1", snp_count=3),
+            _make_pair(pair_id="d2", snp_count=1),
+        ]
+
+        panel = _make_panel([j_clean, j_mixed, j_dirty])
+        removed = filter_snp_pairs(panel)
+
+        # j_clean: 0 removed, j_mixed: 1 removed, j_dirty: 1 removed
+        assert removed == 2
+        assert len(j_clean.primer_pairs) == 2
+        assert len(j_mixed.primer_pairs) == 1
+        assert j_mixed.primer_pairs[0].pair_id == "m_clean"
+        assert len(j_dirty.primer_pairs) == 1
+        assert j_dirty.primer_pairs[0].pair_id == "d2"
