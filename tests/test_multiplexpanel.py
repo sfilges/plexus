@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from plexus.designer.multiplexpanel import JunctionInput, MultiplexPanel
+from plexus.designer.multiplexpanel import Junction, JunctionInput, MultiplexPanel
 
 
 class TestMultiplexPanelImport:
@@ -106,6 +106,73 @@ class TestMultiplexPanelImport:
             assert len(panel.junctions) == 2
         finally:
             Path(temp_path).unlink()
+
+
+class TestJunctionCoordinateCalculation:
+    """Tests for calculate_junction_coordinates_in_design_region()."""
+
+    def test_junction_relative_coordinates(self):
+        """Junction position is correctly converted to 0-based design region index."""
+        # Setup: junction at genomic 1-based position 1000, design_start at 800
+        # design_region is 401 bases (genomic 800–1200 inclusive)
+        panel = MultiplexPanel("test", "hg38")
+        junction = Junction(
+            name="J1",
+            chrom="chr1",
+            start=1000,
+            end=1000,
+            design_region="A" * 401,
+            design_start=800,
+            design_end=1200,
+        )
+        panel.junctions = [junction]
+        # No config loaded → default padding of 3bp
+        panel.calculate_junction_coordinates_in_design_region()
+
+        # junction.start(1000) - design_start(800) = 200 (0-based index)
+        # jmin = 200 - 3 = 197, jmax = 200 + 3 = 203
+        assert junction.jmin_coordinate == 197
+        assert junction.jmax_coordinate == 203
+
+    def test_junction_relative_coordinates_asymmetric(self):
+        """Junction spanning multiple bases produces correct min/max."""
+        panel = MultiplexPanel("test", "hg38")
+        junction = Junction(
+            name="J1",
+            chrom="chr1",
+            start=1000,
+            end=1010,
+            design_region="A" * 421,
+            design_start=800,
+            design_end=1220,
+        )
+        panel.junctions = [junction]
+        panel.calculate_junction_coordinates_in_design_region()
+
+        # five_rel = 1000 - 800 = 200, three_rel = 1010 - 800 = 210
+        # jmin = 200 - 3 = 197, jmax = 210 + 3 = 213
+        assert junction.jmin_coordinate == 197
+        assert junction.jmax_coordinate == 213
+
+    def test_junction_coordinates_clamped_to_bounds(self):
+        """Coordinates are clamped to design region boundaries."""
+        panel = MultiplexPanel("test", "hg38")
+        junction = Junction(
+            name="J1",
+            chrom="chr1",
+            start=802,
+            end=802,
+            design_region="A" * 10,
+            design_start=800,
+            design_end=809,
+        )
+        panel.junctions = [junction]
+        panel.calculate_junction_coordinates_in_design_region()
+
+        # five_rel = 802 - 800 = 2, padding 3 → jmin = max(0, 2-3) = 0
+        # jmax = min(9, 2+3) = 5
+        assert junction.jmin_coordinate == 0
+        assert junction.jmax_coordinate == 5
 
 
 class TestJunctionInputModel:

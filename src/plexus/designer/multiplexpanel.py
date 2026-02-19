@@ -473,6 +473,9 @@ class MultiplexPanel:
 
         Uses pysam for indexed random access (requires .fai index).
 
+        Stores ``junction.design_start`` as the **1-based** genomic coordinate
+        of the first base of the extracted design region sequence.
+
         Args:
             fasta_file: Path to the FASTA file
             padding: Number of bases to pad on each side of the junction
@@ -530,17 +533,12 @@ class MultiplexPanel:
                 # Length of the design region sequence
                 junction.junction_length = len(junction.design_region)
 
-                # Calculate junction coordinates relative to design region start (0-based)
-                # junction positions are 1-based genomic coordinates
-                # design_start is 0-based genomic coordinate
-
-                # Convert junction coordinates to 0-based relative to design region
-                junction_five_rel = (
-                    junction.start - junction.design_start - 1
-                )  # Convert to 0-based
-                junction_three_rel = (
-                    junction.end - junction.design_start - 1
-                )  # Convert to 0-based
+                # Calculate junction coordinates relative to design region start
+                # (0-based index into the design_region string).
+                # Both junction.start and design_start are 1-based genomic
+                # coordinates, so their difference gives a 0-based index.
+                junction_five_rel = junction.start - junction.design_start
+                junction_three_rel = junction.end - junction.design_start
 
                 # Add padding around the junction region
                 jmin_coordinate = min(junction_five_rel, junction_three_rel) - padding

@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Enhanced `plexus status`**: Now shows operational mode and truncated SHA-256 checksums alongside resource readiness.
 - **FEAT-01 · `blastn-short` task for primer queries**: `BlastRunner.run()` now uses `-task blastn-short` by default, tuned for primer-length queries (<30 bp) with word_size=7, reward 1, penalty −3, and gap costs 5/2. The hardcoded `word_size=11` in `specificity.py` has been removed. This improves sensitivity for off-target binding sites where the 3′-terminal region contains mismatches.
 
+### Fixed
+
+- **ARCH-02 · Off-by-one in junction coordinate calculation** (`src/plexus/designer/multiplexpanel.py:533`): `calculate_junction_coordinates_in_design_region()` computed junction-relative coordinates as `junction.start - design_start - 1`, but since both values are 1-based genomic coordinates, the correct formula is `junction.start - design_start` (no `- 1`). The erroneous subtraction shifted the primer design window by 1 bp, masked by the ±3 bp `junction_padding_bases`. A misleading comment incorrectly stated `design_start` was 0-based; corrected to document the 1-based convention. Added unit tests for the coordinate calculation.
+
 ### Changed
 
 - **`plexus init` requires explicit files by default**: Running `plexus init` without `--fasta` (and without `--download`) now errors with an actionable message, preventing accidental multi-GB downloads.

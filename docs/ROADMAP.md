@@ -219,23 +219,24 @@ formats (e.g. IDT plate layout), and workspace-level checksum enforcement profil
 
 ---
 
-### ARCH-02 · Coordinate system: `design_start` 0-based vs 1-based
+### ~~ARCH-02 · Coordinate system: `design_start` 0-based vs 1-based~~ ✅ Fixed in v0.4.5
 
-**Severity: Minor · Files: `src/plexus/designer/multiplexpanel.py:495`, `blast/specificity.py`**
+**Severity: Minor · File: `src/plexus/designer/multiplexpanel.py:533`**
 
 `design_start` is assigned as `junction_start - padding` where `junction_start` comes from the
-input CSV (1-based genomic coordinates). pysam's `fasta.fetch(chrom, start, end)` uses 0-based
-half-open coordinates, so the fetch effectively starts one base downstream of the stored
-`design_start` value. The ±5 bp tolerance in `_is_on_target()` masks this in practice, but the
-coordinate semantics are inconsistent.
+input CSV (1-based genomic coordinates). Investigation confirmed that `design_start` IS correctly
+1-based throughout the codebase — the pysam fetch correctly converts with `design_start - 1`, and
+BLAST/SNP coordinate comparisons are correct.
 
-**Fix (preferred):** Store `design_start` as the 1-based genomic coordinate of the first extracted
-base (`= junction_start - padding + 1`) and document the convention explicitly. Adjust the pysam
-fetch call to use `design_start - 1` (converting to 0-based). This makes `design_start`
-semantically match BLAST's 1-based `sstart` and removes the hidden off-by-one.
+The actual bug was in `calculate_junction_coordinates_in_design_region()`, where a misleading
+comment stated `design_start` was 0-based and an erroneous `- 1` shifted the junction-relative
+coordinates by one position: `junction.start - junction.design_start - 1` instead of the correct
+`junction.start - junction.design_start`. This shifted the primer design window by 1 bp, masked
+by the ±3 bp `junction_padding_bases`.
 
-Alternatively, tighten the tolerance comment in `_is_on_target()` to explicitly note that 1 bp of
-the tolerance budget is consumed by this coordinate offset.
+**Fix:** Removed the erroneous `- 1`, corrected the comment, and documented the 1-based convention
+in the `extract_design_regions_from_fasta()` docstring. Added unit tests for the coordinate
+calculation.
 
 ---
 
@@ -499,7 +500,7 @@ and AmpliconFinder pairing logic together.
 | ~~AUDT-01~~ | ~~Tool versions and data checksums~~ | ~~v1.0~~ | ~~Important~~ | ✅ v0.4.5 |
 | SYS-01 | Pre-flight disk space check | v1.0 | Minor | |
 | CLI-01 | `plexus init` template generation | v1.0 | Important | Partial v0.4.5 |
-| ARCH-02 | Clarify `design_start` coordinate convention | v1.0 | Minor | |
+| ~~ARCH-02~~ | ~~Clarify `design_start` coordinate convention~~ | ~~v1.0~~ | ~~Minor~~ | ✅ v0.4.5 |
 | ~~ARCH-03~~ | ~~Replace `print()` with `logger` in blast_runner~~ | ~~v1.0~~ | ~~Minor~~ | ✅ v0.4.4 |
 | DOC-01 | Document input CSV format | v1.0 | Important | |
 | DOC-02 | Chromosome naming validation / pre-flight check | v1.0 | Important | |
