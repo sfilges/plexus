@@ -16,6 +16,10 @@
 - **Configuration Presets**: Includes `default` and `lenient` configuration presets for different design stringencies.
 - **CLI Interface**: Easy-to-use command line interface for running the design pipeline.
 
+## Limitations
+
+- **Panel Size**: `plexus` is specifically designed and optimized for small to medium-sized panels (typically <100 targets). While it can handle larger panels, the multiplex optimization step (especially with cross-dimer checks) may become computationally expensive as complexity grows $O(N^2)$.
+
 ## Installation
 
 ### Prerequisites
@@ -90,11 +94,13 @@ Use `--parallel` to run panels concurrently.
 
 ### SNP Checking
 
-SNP checking requires the bundled gnomAD VCF. Download it once before the first run:
+SNP checking requires a tabix-indexed VCF. You can download a bundled gnomAD VCF for a quick start:
 
 ```bash
 plexus init
 ```
+
+> **Note**: `plexus init` is a convenience feature for quick starts. For production use, it is highly recommended that users provide their own verified VCF files, stored locally, and supply them via the `--snp-vcf` CLI argument.
 
 Check resource status at any time:
 

@@ -1,6 +1,75 @@
+import subprocess
+import time
 import warnings
 
 from loguru import logger
+
+
+def run_command(
+    cmd: list[str],
+    retries: int = 3,
+    delay: float = 1.0,
+    backoff: float = 2.0,
+    check: bool = True,
+    **kwargs,
+) -> subprocess.CompletedProcess:
+    """Run a shell command with retries and exponential backoff.
+
+    Parameters
+    ----------
+    cmd : list[str]
+        The command to run as a list of strings.
+    retries : int
+        Number of times to retry if the command fails.
+    delay : float
+        Initial delay between retries in seconds.
+    backoff : float
+        Multiplier for the delay after each failure.
+    check : bool
+        If True, raises subprocess.CalledProcessError if the command fails
+        after all retries.
+    **kwargs
+        Additional arguments passed to subprocess.run.
+
+    Returns
+    -------
+    subprocess.CompletedProcess
+        The result of the command execution.
+    """
+    current_delay = delay
+
+    for attempt in range(retries + 1):
+        try:
+            # Ensure capture_output is set if we want to log stderr on failure
+            if "capture_output" not in kwargs and "stderr" not in kwargs:
+                kwargs["capture_output"] = True
+            if "text" not in kwargs:
+                kwargs["text"] = True
+
+            result = subprocess.run(cmd, check=check, **kwargs)
+            return result
+        except subprocess.CalledProcessError as e:
+            if attempt < retries:
+                logger.warning(
+                    f"Command failed (attempt {attempt + 1}/{retries + 1}): {' '.join(cmd)}"
+                )
+                stderr_output = e.stderr or ""
+                if stderr_output:
+                    logger.warning(f"Error output: {stderr_output.strip()}")
+                logger.warning(f"Retrying in {current_delay}s...")
+                time.sleep(current_delay)
+                current_delay *= backoff
+            else:
+                logger.error(
+                    f"Command failed after {retries + 1} attempts: {' '.join(cmd)}"
+                )
+                if check:
+                    raise e
+        except Exception as e:
+            logger.error(f"Unexpected error running command {' '.join(cmd)}: {e}")
+            raise e
+
+    return None  # Should not reach here if check=True
 
 
 def write_fasta_from_dict(input_dt: dict, output_fasta: str) -> None:

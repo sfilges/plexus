@@ -526,8 +526,8 @@ class TestGetSnpVcf:
                 output_dir=tmp_path,
             )
 
-            # bcftools should be called (view + index)
-            assert mock_run.call_count == 2
+            # bcftools should be called (index -l, view, index)
+            assert mock_run.call_count == 3
             assert result == tmp_path / "snpcheck_regions.vcf.gz"
 
     def test_no_vcf_available_raises(self, tmp_path):

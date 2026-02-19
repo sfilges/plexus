@@ -20,6 +20,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 FROM python:3.13-slim-bookworm
 
+# Install system dependencies (BLAST+ and bcftools)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ncbi-blast+ \
+    bcftools \
+    && rm -rf /var/lib/apt/lists/*
+
+# Note: plexus is optimized for small to medium-sized panels (<100 targets).
 # Copy the environment from the builder stage
 COPY --from=builder --chown=root:root /app/.venv /app/.venv
 

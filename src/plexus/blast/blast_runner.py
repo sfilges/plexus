@@ -1,9 +1,9 @@
 import os
-import subprocess
 
 import pandas as pd
 
 from plexus.utils.env import check_executable
+from plexus.utils.utils import run_command
 
 
 def _check_blast_tools() -> None:
@@ -69,7 +69,7 @@ class BlastRunner:
             return self
 
         # Create database
-        subprocess.run(
+        run_command(
             [
                 "makeblastdb",
                 "-in",
@@ -96,7 +96,7 @@ class BlastRunner:
         """
 
         # Run
-        subprocess.run(
+        run_command(
             [
                 "blastn",
                 "-db",
@@ -111,6 +111,7 @@ class BlastRunner:
                 output_archive,
             ],
             check=True,
+            retries=2,
         )
 
         # Save as instance variable, for reformattings
@@ -126,7 +127,7 @@ class BlastRunner:
         """
 
         # Run
-        subprocess.run(
+        run_command(
             [
                 "blast_formatter",
                 "-archive",

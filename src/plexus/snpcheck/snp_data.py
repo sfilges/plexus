@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 import tempfile
 from pathlib import Path
 
@@ -27,6 +26,7 @@ from plexus.snpcheck.resources import (
     is_resource_available,
 )
 from plexus.utils.env import check_executable
+from plexus.utils.utils import run_command
 
 
 def _check_bcftools() -> str:
@@ -41,7 +41,30 @@ def _check_bcftools() -> str:
     return bcftools
 
 
-def _write_regions_bed(panel: MultiplexPanel, tmpdir: Path, padding: int = 200) -> Path:
+def _get_vcf_contigs(vcf_path: Path) -> set[str]:
+    """Get the set of contig names present in a tabix-indexed VCF.
+
+    Uses ``bcftools index -l`` for efficient contig listing.
+    """
+    bcftools = _check_bcftools()
+    result = run_command(
+        [bcftools, "index", "-l", str(vcf_path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    stdout = result.stdout.strip()
+    if not stdout:
+        return set()
+    return set(stdout.split("\n"))
+
+
+def _write_regions_bed(
+    panel: MultiplexPanel,
+    tmpdir: Path,
+    padding: int = 200,
+    valid_contigs: set[str] | None = None,
+) -> Path:
     """Generate a BED file of panel regions for bcftools intersection.
 
     Parameters
@@ -52,6 +75,9 @@ def _write_regions_bed(panel: MultiplexPanel, tmpdir: Path, padding: int = 200) 
         Directory to write the BED file.
     padding : int
         Extra bases around each junction region.
+    valid_contigs : set[str] | None
+        Set of contig names that are valid in the target VCF. If provided,
+        regions on other contigs will be skipped to avoid bcftools errors.
 
     Returns
     -------
@@ -59,11 +85,16 @@ def _write_regions_bed(panel: MultiplexPanel, tmpdir: Path, padding: int = 200) 
         Path to the BED file.
     """
     bed_path = tmpdir / "panel_regions.bed"
+    count = 0
     with bed_path.open("w") as f:
         for junction in panel.junctions:
             if not hasattr(junction, "design_start") or junction.design_start is None:
                 continue
             chrom = junction.chrom
+
+            if valid_contigs is not None and chrom not in valid_contigs:
+                logger.debug(f"Skipping region on contig '{chrom}' (not in SNP VCF)")
+                continue
 
             start = max(0, junction.design_start - padding)
             if hasattr(junction, "design_end") and junction.design_end is not None:
@@ -72,6 +103,12 @@ def _write_regions_bed(panel: MultiplexPanel, tmpdir: Path, padding: int = 200) 
                 end = max(junction.start, junction.end) + padding
 
             f.write(f"{chrom}\t{start}\t{end}\n")
+            count += 1
+
+    if count == 0:
+        logger.warning(
+            "No regions from the panel were found in the SNP VCF contig list."
+        )
 
     return bed_path
 
@@ -112,11 +149,23 @@ def intersect_vcf_with_regions(
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
-        bed_path = _write_regions_bed(panel, tmpdir_path, padding)
+
+        # Pre-filter contigs to avoid bcftools crashing on missing contigs
+        logger.debug(f"Getting contig list from {vcf_path}...")
+        try:
+            vcf_contigs = _get_vcf_contigs(vcf_path)
+            bed_path = _write_regions_bed(
+                panel, tmpdir_path, padding, valid_contigs=vcf_contigs
+            )
+        except Exception as e:
+            logger.warning(
+                f"Failed to get contig list from VCF: {e}. Proceeding without filtering."
+            )
+            bed_path = _write_regions_bed(panel, tmpdir_path, padding)
 
         logger.info("Extracting panel regions from SNP VCF...")
 
-        result = subprocess.run(
+        run_command(
             [
                 bcftools,
                 "view",
@@ -127,19 +176,14 @@ def intersect_vcf_with_regions(
                 "-o",
                 str(output_vcf),
             ],
-            capture_output=True,
-            text=True,
+            check=True,
+            retries=3,
         )
 
-        if result.returncode != 0:
-            logger.error(f"bcftools failed: {result.stderr}")
-            raise RuntimeError(f"bcftools region extraction failed: {result.stderr}")
-
         # Index the output
-        subprocess.run(
+        run_command(
             [bcftools, "index", "-t", str(output_vcf)],
             check=True,
-            capture_output=True,
         )
 
     logger.info(f"Created region-specific VCF: {output_vcf}")
