@@ -31,6 +31,7 @@ class MultiplexCostFunction:
         self.wt_off_target = config.wt_off_target
         self.wt_cross_dimer = config.wt_cross_dimer
         self.wt_pair_dimer = config.wt_pair_dimer
+        self.wt_snp_penalty = config.wt_snp_penalty
 
         # Cache for pairwise dimer scores: (seq_a, seq_b) -> score
         self._dimer_cache: dict[tuple[str, str], float] = {}
@@ -56,6 +57,7 @@ class MultiplexCostFunction:
         # 1. Sum individual pair penalties and off-target penalties
         for pair in pairs:
             cost += self.wt_pair_penalty * (pair.pair_penalty or 0.0)
+            cost += self.wt_snp_penalty * (pair.snp_penalty or 0.0)
             cost += self.wt_off_target * len(pair.off_target_products)
             cost += self.wt_pair_dimer * max(0, -(pair.dimer_score or 0.0))
 

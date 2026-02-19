@@ -132,7 +132,9 @@ def run_snp_check(
     Modifies Primer and PrimerPair objects in-place:
       - primer.snp_count
       - pair.snp_count, pair.snp_penalty
-      - pair.pair_penalty (SNP penalty added)
+
+    Note: pair.pair_penalty is NOT modified. The SNP penalty is kept separate
+    so it can be independently weighted in the cost function.
 
     Parameters
     ----------
@@ -206,11 +208,13 @@ def run_snp_check(
                 pair.snp_count = pair_snp_count
                 pair.snp_penalty = pair_snp_penalty
 
-                if pair.snp_penalty > 0:
-                    if pair.pair_penalty is not None:
-                        pair.pair_penalty += pair.snp_penalty
-                    else:
-                        pair.pair_penalty = pair.snp_penalty
+            n_pairs = len(junction.primer_pairs)
+            n_snp_pairs = sum(1 for p in junction.primer_pairs if p.snp_count > 0)
+            if n_snp_pairs > 0:
+                logger.info(
+                    f"Junction {junction.name}: {n_snp_pairs}/{n_pairs} pairs overlap SNPs "
+                    f"({n_pairs - n_snp_pairs} clean pair(s) available)"
+                )
 
     logger.info(
         f"SNP check complete: {total_snps} SNPs found across {primers_with_snps} primers"

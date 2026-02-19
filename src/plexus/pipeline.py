@@ -121,6 +121,7 @@ def run_pipeline(
     snp_af_threshold: float | None = None,
     snp_strict: bool = False,
     selector: str = "Greedy",
+    debug: bool = False,
 ) -> PipelineResult:
     """
     Run the complete multiplex primer design pipeline.
@@ -189,7 +190,7 @@ def run_pipeline(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Enable file logging to output directory
-    log_file = configure_file_logging(str(output_dir))
+    log_file = configure_file_logging(str(output_dir), debug=debug)
     logger.info(f"Log file: {log_file}")
 
     # Load configuration

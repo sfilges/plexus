@@ -81,6 +81,9 @@ def run_specificity_check(panel: MultiplexPanel, work_dir: str, genome_fasta: st
     seq_to_id = panel.unique_primer_map
 
     for junction in panel.junctions:
+        n_checked = 0
+        n_missing_on_target = 0
+
         for pair in junction.primer_pairs:
             f_seq = pair.forward.seq
             r_seq = pair.reverse.seq
@@ -92,6 +95,7 @@ def run_specificity_check(panel: MultiplexPanel, work_dir: str, genome_fasta: st
                 continue
 
             pair.specificity_checked = True
+            n_checked += 1
 
             potential_products = amplicon_map.get((f_id, r_id), [])
 
@@ -107,15 +111,22 @@ def run_specificity_check(panel: MultiplexPanel, work_dir: str, genome_fasta: st
             pair.on_target_detected = len(on_targets) > 0
 
             if not pair.on_target_detected:
-                logger.warning(
-                    f"Pair {pair.pair_id}: on-target amplicon not detected by BLAST. "
-                    "Check BLAST sensitivity or junction coordinates."
+                n_missing_on_target += 1
+                logger.debug(
+                    f"Pair {pair.pair_id}: on-target amplicon not detected by BLAST."
                 )
 
             if off_targets:
                 logger.debug(
                     f"Pair {pair.pair_id} has {len(off_targets)} off-target products."
                 )
+
+        if n_missing_on_target > 0:
+            logger.warning(
+                f"Junction {junction.name}: {n_missing_on_target}/{n_checked} pairs "
+                "have no on-target amplicon detected by BLAST. "
+                "Check BLAST sensitivity or junction coordinates."
+            )
 
     logger.info("Specificity check complete.")
 
@@ -125,22 +136,36 @@ def _is_on_target(prod: dict, junction, pair) -> bool:
 
     Compares the BLAST hit genomic coordinates against the expected
     primer binding positions derived from the junction's design region.
+
+    Coordinate conventions
+    ----------------------
+    - ``design_start`` is the 1-based genomic coordinate of the first base
+      of the design region sequence.
+    - ``pair.forward.start`` and ``pair.reverse.start`` are 0-based indices
+      into the design region string; the forward primer's leftmost position
+      is ``design_start + forward.start`` (1-based).
+    - BLAST ``F_start`` (plus-strand ``sstart``) = leftmost (5') genomic
+      position of the forward primer — matches ``design_start + forward.start``.
+    - BLAST ``R_start`` (minus-strand ``sstart``) = **rightmost** (5') genomic
+      position of the reverse primer — matches
+      ``design_start + reverse.start + reverse.length - 1``.
     """
     if prod["chrom"] != junction.chrom:
         return False
 
-    # Expected genomic positions of this primer pair
     design_start = getattr(junction, "design_start", None) or 0
-    expected_fwd_start = design_start + pair.forward.start
-    expected_rev_start = design_start + pair.reverse.start
 
-    # BLAST hit positions from AmpliconFinder
-    blast_fwd_start = prod["F_start"]
-    blast_rev_start = prod["R_start"]
+    # Forward primer: BLAST sstart (plus strand) = leftmost = 5' end
+    expected_fwd_start = design_start + pair.forward.start
+
+    # Reverse primer: BLAST sstart (minus strand) = rightmost = 5' end of
+    # the reverse primer.  pair.reverse.start is the leftmost (3') position,
+    # so the rightmost = start + length - 1.
+    expected_rev_start = design_start + pair.reverse.start + pair.reverse.length - 1
 
     # Allow small tolerance for BLAST coordinate alignment differences
     tolerance = 5  # bp
-    fwd_match = abs(blast_fwd_start - expected_fwd_start) <= tolerance
-    rev_match = abs(blast_rev_start - expected_rev_start) <= tolerance
+    fwd_match = abs(prod["F_start"] - expected_fwd_start) <= tolerance
+    rev_match = abs(prod["R_start"] - expected_rev_start) <= tolerance
 
     return fwd_match and rev_match

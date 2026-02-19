@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -42,21 +43,25 @@ def _check_bcftools() -> str:
 
 
 def _get_vcf_contigs(vcf_path: Path) -> set[str]:
-    """Get the set of contig names present in a tabix-indexed VCF.
+    """Get the set of contig names declared in the VCF header.
 
-    Uses ``bcftools index -l`` for efficient contig listing.
+    Uses ``bcftools view --header-only`` and parses ``##contig=<ID=...>`` lines.
+    This approach works regardless of how the index was created (tabix or bcftools)
+    and does not require count metadata in the index.
     """
     bcftools = _check_bcftools()
     result = run_command(
-        [bcftools, "index", "-l", str(vcf_path)],
+        [bcftools, "view", "--header-only", str(vcf_path)],
         check=True,
         capture_output=True,
         text=True,
     )
-    stdout = result.stdout.strip()
-    if not stdout:
-        return set()
-    return set(stdout.split("\n"))
+    contigs = set()
+    for line in result.stdout.splitlines():
+        m = re.match(r"##contig=<ID=([^,>]+)", line)
+        if m:
+            contigs.add(m.group(1))
+    return contigs
 
 
 def _write_regions_bed(

@@ -5,6 +5,23 @@ All notable changes to plexus will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - 19-02-2026
+
+### Added
+
+- **Independent SNP penalty weight in cost function**: `wt_snp_penalty` (default `3.0`) added to `MultiplexPickerParameters` as a first-class cost function weight, independent of `wt_pair_penalty`. Previously, `snp_penalty` was merged directly into `pair_penalty` before optimization, making it impossible to tune separately and causing SNP-affected pairs to be preferred over clean alternatives when thermodynamic scores differed only modestly. With the new default, a 3′ SNP (snp_penalty=30) now contributes 90 to cost vs. 30 before — large enough to prefer a clean pair unless its thermodynamic penalty exceeds the SNP pair's by more than 90. Set `wt_snp_penalty: 0` to disable SNP weighting entirely. Added to both `designer_default_config.json` (`3.0`) and `designer_lenient_config.json` (`1.0`).
+- **Per-junction SNP observability**: `run_snp_check()` now logs a per-junction summary (`Junction X: N/M pairs overlap SNPs (K clean pair(s) available)`) immediately after processing each junction, making it trivial to diagnose whether a SNP-affected junction had clean alternatives.
+
+### Changed
+
+- **`pair_penalty` is now purely thermodynamic**: `run_snp_check()` no longer adds `snp_penalty` to `pair_penalty`. The `Pair_Penalty` column in output CSVs now reflects only the thermodynamic component; `SNP_Penalty` remains a separate column and is now the sole vehicle through which SNP cost enters the optimizer.
+
+### Fixed
+
+- **`bcftools index` contig listing incompatibility**: `_get_vcf_contigs()` previously used `bcftools index -l` (removed in bcftools 1.21+) then `--stats` (requires count metadata absent from tabix-created indices). Now uses `bcftools view --header-only` and parses `##contig=<ID=...>` lines from the VCF header, which works regardless of bcftools version or how the index was created. Previously caused 4 retries with exponential backoff (~7s wasted) before falling back to running without contig pre-filtering.
+- **On-target warning noise**: `run_specificity_check()` was emitting one `WARNING` per candidate pair that had no on-target BLAST hit, producing thousands of log lines for junctions in repetitive regions (e.g. GOLGA2). Per-pair messages are now demoted to `DEBUG`; a single `WARNING` per junction summarises the count (`N/M pairs have no on-target amplicon detected`).
+- **`_is_on_target()` reverse primer coordinate bug**: The expected BLAST position of the reverse primer was computed as `design_start + reverse.start`, but BLAST reports the 5′ end (rightmost base) of a minus-strand hit, so the correct value is `design_start + reverse.start + reverse.length - 1`. The old formula caused on-target amplicons to be misclassified as off-target whenever the reverse primer was longer than 1 bp.
+
 ## [0.4.2] - 19-02-2026
 
 ### Added

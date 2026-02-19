@@ -83,6 +83,7 @@
         "wt_pair_penalty": 1.0,
         "wt_off_target": 5.0,
         "wt_cross_dimer": 1.0,
-        "wt_pair_dimer": 1.0
+        "wt_pair_dimer": 1.0,
+        "wt_snp_penalty": 3.0
     }
 }

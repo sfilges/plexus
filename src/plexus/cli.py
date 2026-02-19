@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
-from loguru import logger
 from rich.console import Console
 
 from plexus.version import __version__
@@ -45,14 +44,8 @@ def main(
             help="Show version and exit.",
         ),
     ] = False,
-    verbose: Annotated[
-        bool,
-        typer.Option("--verbose", "-V", help="Enable verbose output (DEBUG level)."),
-    ] = False,
 ) -> None:
     """Multiplex Primer Designer - Design optimized multiplex PCR primer panels."""
-    log_level = "DEBUG" if verbose else "INFO"
-    logger.add("plexus.log", level=log_level)
 
 
 @app.command()
@@ -177,6 +170,13 @@ def run(
             help="Multiplex selector algorithm: Greedy, Random, BruteForce, SimulatedAnnealing, or DFS.",
         ),
     ] = "Greedy",
+    debug: Annotated[
+        bool,
+        typer.Option(
+            "--debug",
+            help="Write DEBUG-level messages to the log file (default: INFO+ only).",
+        ),
+    ] = False,
 ) -> None:
     """
     Run the complete multiplex primer design pipeline.
@@ -226,6 +226,7 @@ def run(
             snp_af_threshold=snp_af_threshold,
             snp_strict=snp_strict,
             selector=selector,
+            debug=debug,
         )
 
         if isinstance(result, MultiPanelResult):

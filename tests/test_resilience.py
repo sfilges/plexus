@@ -74,10 +74,13 @@ def test_write_regions_bed_filtering(tmp_path):
 
 def test_get_vcf_contigs_mock():
     mock_result = MagicMock()
-    mock_result.stdout = """chr1
-chr2
-chr3
-"""
+    mock_result.stdout = (
+        "##fileformat=VCFv4.1\n"
+        "##contig=<ID=chr1,length=248956422>\n"
+        "##contig=<ID=chr2,length=242193529>\n"
+        "##contig=<ID=chr3,length=198295559>\n"
+        "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
+    )
 
     with patch("plexus.snpcheck.snp_data.run_command", return_value=mock_result):
         with patch("plexus.snpcheck.snp_data._check_bcftools", return_value="bcftools"):

@@ -191,6 +191,12 @@ class MultiplexPickerParameters(BaseModel):
         ge=0.0,
         description="Weight for intra-pair F/R dimer score in cost function.",
     )
+    wt_snp_penalty: float = Field(
+        default=3.0,
+        ge=0.0,
+        description="Weight for SNP penalty in cost function. "
+        "Independent of wt_pair_penalty. Set to 0 to disable.",
+    )
 
     @model_validator(mode="after")
     def validate_plexity_range(self) -> MultiplexPickerParameters:

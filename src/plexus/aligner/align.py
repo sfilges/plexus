@@ -64,6 +64,9 @@ class PrimerDimerPredictor:
     the highest scoring alignment
     """
 
+    # Class-level cache: param_path -> (nn_scores, end_length, end_bonus)
+    _param_cache: dict[str, tuple[dict[str, float], int, float]] = {}
+
     def __init__(self, param_path: str | None = None) -> None:
         """
         Initialize the PrimerDimerPredictor aligner.
@@ -104,13 +107,22 @@ class PrimerDimerPredictor:
     def load_parameters(self, param_path: str) -> None:
         """
         Load parameters necessary for Primer Dimer algorithm,
-        and set as attributes
+        and set as attributes. Results are cached by path so that
+        repeated instantiations within the same process only read
+        the JSON files once.
 
         Parameters
         ----------
         param_path : str
             Path to the parameters JSON file
         """
+        if param_path in PrimerDimerPredictor._param_cache:
+            logger.debug(f"Using cached alignment parameters from: {param_path}")
+            self.nn_scores, self.end_length, self.end_bonus = (
+                PrimerDimerPredictor._param_cache[param_path]
+            )
+            return
+
         logger.info(f"Loading alignment parameters from: {param_path}")
 
         # Load parameter JSON
@@ -127,6 +139,12 @@ class PrimerDimerPredictor:
         # Load penalties
         self.end_length = params["end_length"]
         self.end_bonus = params["end_bonus"]
+
+        PrimerDimerPredictor._param_cache[param_path] = (
+            self.nn_scores,
+            self.end_length,
+            self.end_bonus,
+        )
 
     @staticmethod
     def _calc_linear_extension_bonus(

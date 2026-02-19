@@ -22,12 +22,13 @@ logger.add(
 )
 
 
-def configure_file_logging(log_dir: str = ".") -> str:
+def configure_file_logging(log_dir: str = ".", debug: bool = False) -> str:
     """
     Configure file logging with a timestamped log file.
 
     Args:
         log_dir: Directory to write log files to. Defaults to current directory.
+        debug: If True, write DEBUG+ messages. Otherwise write INFO+ only.
 
     Returns:
         Path to the log file.
@@ -41,7 +42,7 @@ def configure_file_logging(log_dir: str = ".") -> str:
             "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | "
             "{name}:{function}:{line} - {message}"
         ),
-        level="DEBUG",
+        level="DEBUG" if debug else "INFO",
         rotation="10 MB",
     )
 

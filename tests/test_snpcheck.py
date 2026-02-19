@@ -216,7 +216,8 @@ class TestRunSnpCheck:
         assert pair.snp_count == 2
         # Penalty is position-weighted (not simply count * weight)
         assert pair.snp_penalty > 0
-        assert pair.pair_penalty == original_penalty + pair.snp_penalty
+        # pair_penalty is no longer modified by SNP check; SNP is a separate cost term
+        assert pair.pair_penalty == original_penalty
 
     def test_no_snps_no_penalty(self):
         """No SNPs means penalty unchanged."""
@@ -288,7 +289,9 @@ class TestRunSnpCheck:
                 snp_3prime_multiplier=3.0,
             )
 
-        assert pair.pair_penalty == pair.snp_penalty
+        # pair_penalty stays None; snp_penalty is set separately
+        assert pair.pair_penalty is None
+        assert pair.snp_penalty > 0
 
     def test_skips_junction_without_design_start(self):
         """Junctions without design_start are skipped gracefully."""

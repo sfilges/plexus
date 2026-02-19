@@ -156,11 +156,14 @@ class TestDepthFirstSearch:
 # ================================================================================
 
 
-def _make_mock_pair(pair_id, pair_penalty=0.0, off_targets=0, dimer_score=None):
+def _make_mock_pair(
+    pair_id, pair_penalty=0.0, off_targets=0, dimer_score=None, snp_penalty=0.0
+):
     """Create a mock PrimerPair with specified attributes."""
     pair = MagicMock()
     pair.pair_id = pair_id
     pair.pair_penalty = pair_penalty
+    pair.snp_penalty = snp_penalty
     pair.off_target_products = [object()] * off_targets
     pair.dimer_score = dimer_score
     pair.forward.seq = f"ACGT_{pair_id}_F"
