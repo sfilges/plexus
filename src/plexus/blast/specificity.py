@@ -41,7 +41,7 @@ def run_specificity_check(panel: MultiplexPanel, work_dir: str, genome_fasta: st
 
     runner = BlastRunner(input_fasta, genome_fasta)
     runner.create_database()
-    runner.run(output_archive=blast_archive, word_size=11)
+    runner.run(output_archive=blast_archive)
     runner.reformat_output_as_table(blast_table)
 
     blast_df = runner.get_dataframe()

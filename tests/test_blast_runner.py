@@ -61,12 +61,13 @@ def test_create_database_skips_if_exists_v4(runner):
             mock_run.assert_not_called()
 
 
-def test_run_command(runner, tmp_path):
+def test_run_command_defaults(runner, tmp_path):
+    """Default run uses -task blastn-short and omits -word_size."""
     output_archive = tmp_path / "output.asn"
     runner.db_path = "/fake/db"
 
     with patch("subprocess.run") as mock_run:
-        runner.run(str(output_archive), word_size=11)
+        runner.run(str(output_archive))
 
         args, kwargs = mock_run.call_args
         command = args[0]
@@ -75,11 +76,43 @@ def test_run_command(runner, tmp_path):
         assert runner.db_path in command
         assert "-query" in command
         assert runner.input_fasta in command
-        assert "-word_size" in command
-        assert "11" in command
+        assert "-task" in command
+        assert "blastn-short" in command
+        assert "-word_size" not in command
         assert "-outfmt" in command
         assert "-out" in command
         assert str(output_archive) in command
+
+
+def test_run_command_explicit_word_size(runner, tmp_path):
+    """Explicit word_size is included in the command."""
+    output_archive = tmp_path / "output.asn"
+    runner.db_path = "/fake/db"
+
+    with patch("subprocess.run") as mock_run:
+        runner.run(str(output_archive), word_size=11)
+
+        args, kwargs = mock_run.call_args
+        command = args[0]
+        assert "-task" in command
+        assert "blastn-short" in command
+        assert "-word_size" in command
+        assert "11" in command
+
+
+def test_run_command_custom_task(runner, tmp_path):
+    """Custom task parameter is passed through."""
+    output_archive = tmp_path / "output.asn"
+    runner.db_path = "/fake/db"
+
+    with patch("subprocess.run") as mock_run:
+        runner.run(str(output_archive), task="blastn")
+
+        args, kwargs = mock_run.call_args
+        command = args[0]
+        assert "-task" in command
+        assert "blastn" in command
+        assert "blastn-short" not in command
 
 
 def test_reformat_output_command(runner, tmp_path):

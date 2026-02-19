@@ -88,7 +88,7 @@ attempting `makeblastdb` only if neither is found. Alternatively, probe with a z
 
 ---
 
-### FEAT-01 · Switch BLAST to `blastn-short` task for primer-length queries
+### ~~FEAT-01 · Switch BLAST to `blastn-short` task for primer-length queries~~ ✅ Fixed in v0.4.5
 
 **Severity: Important · File: `src/plexus/blast/blast_runner.py:run()`**
 
@@ -98,10 +98,9 @@ costs 5/2). The current default (`word_size=11`) seeds with 11-mers, which can m
 where the 3′-terminal 11 bases contain a mismatch — exactly the scenario most relevant to PCR
 off-target analysis.
 
-**Fix:** Pass `-task blastn-short` when the shortest query sequence is below a threshold (e.g.,
-35 bp). Since all queries are primers, this should be the default. Remove the explicit
-`word_size=11` from `specificity.py` and let the task preset manage it, or explicitly set
-`word_size=7`.
+**Fix:** `blastn-short` is now the default task. The hardcoded `word_size=11` in `specificity.py`
+has been removed; `blastn-short` manages its own defaults (word_size=7). An explicit `word_size`
+can still be passed to `BlastRunner.run()` if needed.
 
 ---
 
@@ -493,7 +492,7 @@ and AmpliconFinder pairing logic together.
 | ~~BUG-01~~ | ~~Fix `from_3prime` annotation (`qlen` vs `length`)~~ | ~~v1.0~~ | ~~Critical~~ | ✅ v0.4.4 |
 | ~~BUG-02~~ | ~~Fix `product_bp` off-by-one in AmpliconFinder~~ | ~~v1.0~~ | ~~Minor~~ | ✅ v0.4.4 |
 | ~~BUG-03~~ | ~~Fix BLAST+ v5 database detection~~ | ~~v1.0~~ | ~~Important~~ | ✅ v0.4.4 |
-| FEAT-01 | Switch to `blastn-short` task for primer queries | v1.0 | Important | |
+| ~~FEAT-01~~ | ~~Switch to `blastn-short` task for primer queries~~ | ~~v1.0~~ | ~~Important~~ | ✅ v0.4.5 |
 | FEAT-02 | Cross-target vs off-target amplicon classification | v1.0 | Important | |
 | FEAT-03 | Remove dead code from AmpliconFinder | v1.0 | Minor | |
 | REPT-01 | Basic Panel QC Report (JSON) | v1.0 | Important | |

@@ -90,34 +90,36 @@ class BlastRunner:
 
         return self
 
-    def run(self, output_archive, word_size=7):
+    def run(self, output_archive, word_size=None, task="blastn-short"):
         """
-        Run blast, writing a BLAST archive to `output_archive`
+        Run blast, writing a BLAST archive to `output_archive`.
 
-        Note that we run with output format 11 `-outfmt 11` to
+        Uses ``-task blastn-short`` by default, which is tuned for
+        primer-length queries (<30 bp) with word_size=7, reward 1,
+        penalty −3, and gap costs 5/2.
+
+        Note that we run with output format 11 ``-outfmt 11`` to
         produce the archive; from this format you can convert to
         all other formats.
-
         """
 
-        # Run
-        run_command(
-            [
-                "blastn",
-                "-db",
-                self.db_path,
-                "-query",
-                self.input_fasta,
-                "-word_size",
-                str(word_size),
-                "-outfmt",
-                "11",
-                "-out",
-                output_archive,
-            ],
-            check=True,
-            retries=2,
-        )
+        cmd = [
+            "blastn",
+            "-db",
+            self.db_path,
+            "-query",
+            self.input_fasta,
+            "-task",
+            task,
+            "-outfmt",
+            "11",
+            "-out",
+            output_archive,
+        ]
+        if word_size is not None:
+            cmd.extend(["-word_size", str(word_size)])
+
+        run_command(cmd, check=True, retries=2)
 
         # Save as instance variable, for reformattings
         self.output_archive = output_archive

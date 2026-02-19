@@ -20,8 +20,7 @@ from loguru import logger
 # continue to work.
 from plexus.resources import (  # noqa: F401
     DEFAULT_DATA_DIR as DEFAULT_CACHE_DIR,
-)
-from plexus.resources import (
+    ENV_DATA_DIR,
     GENOME_PRESETS,
     get_cache_dir,
 )

@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`--download` flag on `plexus init`**: Downloads from preset URLs are no longer the default. Provide local files with `--fasta`/`--snp-vcf`, or explicitly opt in to downloading with `--download`.
 - **Tool version capture**: New `get_tool_version()`, `get_tool_versions()`, `get_plexus_version()`, and `get_primer3_version()` utilities in `plexus.utils.env`.
 - **Enhanced `plexus status`**: Now shows operational mode and truncated SHA-256 checksums alongside resource readiness.
+- **FEAT-01 · `blastn-short` task for primer queries**: `BlastRunner.run()` now uses `-task blastn-short` by default, tuned for primer-length queries (<30 bp) with word_size=7, reward 1, penalty −3, and gap costs 5/2. The hardcoded `word_size=11` in `specificity.py` has been removed. This improves sensitivity for off-target binding sites where the 3′-terminal region contains mismatches.
 
 ### Changed
 
