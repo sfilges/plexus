@@ -112,7 +112,9 @@ def design_multiplex_primers(
 
             # Should the right region be reverse complemented here?
             right_region = reverse_complement(
-                junction.design_region[junction.jmax_coordinate : junction.junction_length]
+                junction.design_region[
+                    junction.jmax_coordinate : junction.junction_length
+                ]
             )
 
             # This generates candidate primers, returns a list of Primer class objects,
@@ -182,8 +184,10 @@ def design_multiplex_primers(
                 left_primers, left_eval_string = calculate_single_primer_thermodynamics(
                     left_kmers, panel.config, orientation="left"
                 )
-                right_primers, right_eval_string = calculate_single_primer_thermodynamics(
-                    right_kmers, panel.config, orientation="right"
+                right_primers, right_eval_string = (
+                    calculate_single_primer_thermodynamics(
+                        right_kmers, panel.config, orientation="right"
+                    )
                 )
 
             primer_table = [left_primers, right_primers]

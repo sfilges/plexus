@@ -5,6 +5,24 @@ All notable changes to plexus will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 19-02-2026
+
+### Added
+
+- **Pre-flight dependency checks**: The pipeline now verifies that required system tools (`blastn`, `makeblastdb`, `blast_formatter`, `bcftools`) are available on the `$PATH` at the very beginning of a run, providing clear installation instructions if any are missing.
+- **System tool status**: The `plexus status` command now displays the availability of required system dependencies alongside genome resources.
+- **Centralized environment utility**: New `plexus.utils.env` module for robust cross-platform executable verification.
+
+### Changed
+
+- Refactored `blast_runner.py` and `snp_data.py` to use centralized tool verification logic.
+
+### Removed
+
+- **Cleaned up dead code**: Removed unused placeholder files and methods (`archive.py`, `in_silico_pcr.py`, and `biopython_process_blast_results`) to streamline the codebase for production.
+- **Removed download-resources** from CLI, as it was redundant with the addition of the init command.
+
+
 ## [0.4.0] - 18-02-2026
 
 ### Added

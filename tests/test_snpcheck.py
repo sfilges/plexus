@@ -2,7 +2,7 @@
 # Tests for SNP overlap checking module
 # ================================================================================
 
-from pathlib import Path
+
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -536,7 +536,7 @@ class TestGetSnpVcf:
             "plexus.snpcheck.snp_data.is_resource_available",
             return_value=False,
         ):
-            with pytest.raises(FileNotFoundError, match="plexus download-resources"):
+            with pytest.raises(FileNotFoundError, match="plexus init"):
                 get_snp_vcf(
                     panel=_make_panel(),
                     output_dir=tmp_path,
@@ -637,26 +637,6 @@ class TestDownloadGnomadVcf:
 # ---------------------------------------------------------------------------
 # CLI commands
 # ---------------------------------------------------------------------------
-
-
-class TestDownloadResourcesCli:
-    def test_success(self):
-        with patch(
-            "plexus.snpcheck.resources.download_gnomad_vcf",
-            return_value=Path("/fake/gnomad.vcf.gz"),
-        ):
-            result = runner.invoke(app, ["download-resources"])
-        assert result.exit_code == 0
-        assert "Done" in result.output
-
-    def test_failure(self):
-        with patch(
-            "plexus.snpcheck.resources.download_gnomad_vcf",
-            side_effect=OSError("network error"),
-        ):
-            result = runner.invoke(app, ["download-resources"])
-        assert result.exit_code == 1
-        assert "Download failed" in result.output
 
 
 class TestStatusCli:
@@ -794,9 +774,13 @@ class TestCalcWeightedSnpPenalty:
         """Forward primer (start=100, length=20): 3' at pos 119. SNP at 119 -> dist=0, boosted."""
         snps = [(119, 0.05)]
         penalty = _calc_weighted_snp_penalty(
-            snps, primer_genomic_start=100, primer_length=20,
-            orientation="forward", base_weight=10.0,
-            three_prime_window=5, three_prime_multiplier=3.0,
+            snps,
+            primer_genomic_start=100,
+            primer_length=20,
+            orientation="forward",
+            base_weight=10.0,
+            three_prime_window=5,
+            three_prime_multiplier=3.0,
         )
         assert penalty == 10.0 * 3.0  # Boosted
 
@@ -804,9 +788,13 @@ class TestCalcWeightedSnpPenalty:
         """SNP at pos 115 -> dist=4 from 3', within window, boosted."""
         snps = [(115, 0.05)]
         penalty = _calc_weighted_snp_penalty(
-            snps, primer_genomic_start=100, primer_length=20,
-            orientation="forward", base_weight=10.0,
-            three_prime_window=5, three_prime_multiplier=3.0,
+            snps,
+            primer_genomic_start=100,
+            primer_length=20,
+            orientation="forward",
+            base_weight=10.0,
+            three_prime_window=5,
+            three_prime_multiplier=3.0,
         )
         assert penalty == 10.0 * 3.0
 
@@ -814,9 +802,13 @@ class TestCalcWeightedSnpPenalty:
         """SNP at pos 114 -> dist=5 from 3', outside window, base weight."""
         snps = [(114, 0.05)]
         penalty = _calc_weighted_snp_penalty(
-            snps, primer_genomic_start=100, primer_length=20,
-            orientation="forward", base_weight=10.0,
-            three_prime_window=5, three_prime_multiplier=3.0,
+            snps,
+            primer_genomic_start=100,
+            primer_length=20,
+            orientation="forward",
+            base_weight=10.0,
+            three_prime_window=5,
+            three_prime_multiplier=3.0,
         )
         assert penalty == 10.0 * 1.0
 
@@ -824,9 +816,13 @@ class TestCalcWeightedSnpPenalty:
         """SNP at pos 100 -> dist=19 from 3', base weight."""
         snps = [(100, 0.05)]
         penalty = _calc_weighted_snp_penalty(
-            snps, primer_genomic_start=100, primer_length=20,
-            orientation="forward", base_weight=10.0,
-            three_prime_window=5, three_prime_multiplier=3.0,
+            snps,
+            primer_genomic_start=100,
+            primer_length=20,
+            orientation="forward",
+            base_weight=10.0,
+            three_prime_window=5,
+            three_prime_multiplier=3.0,
         )
         assert penalty == 10.0 * 1.0
 
@@ -834,9 +830,13 @@ class TestCalcWeightedSnpPenalty:
         """Reverse primer (start=200, length=20): 3' at pos 200. SNP at 200 -> dist=0, boosted."""
         snps = [(200, 0.05)]
         penalty = _calc_weighted_snp_penalty(
-            snps, primer_genomic_start=200, primer_length=20,
-            orientation="reverse", base_weight=10.0,
-            three_prime_window=5, three_prime_multiplier=3.0,
+            snps,
+            primer_genomic_start=200,
+            primer_length=20,
+            orientation="reverse",
+            base_weight=10.0,
+            three_prime_window=5,
+            three_prime_multiplier=3.0,
         )
         assert penalty == 10.0 * 3.0
 
@@ -844,9 +844,13 @@ class TestCalcWeightedSnpPenalty:
         """SNP at pos 204 -> dist=4 from 3', within window, boosted."""
         snps = [(204, 0.05)]
         penalty = _calc_weighted_snp_penalty(
-            snps, primer_genomic_start=200, primer_length=20,
-            orientation="reverse", base_weight=10.0,
-            three_prime_window=5, three_prime_multiplier=3.0,
+            snps,
+            primer_genomic_start=200,
+            primer_length=20,
+            orientation="reverse",
+            base_weight=10.0,
+            three_prime_window=5,
+            three_prime_multiplier=3.0,
         )
         assert penalty == 10.0 * 3.0
 
@@ -854,9 +858,13 @@ class TestCalcWeightedSnpPenalty:
         """SNP at pos 205 -> dist=5 from 3', outside window, base weight."""
         snps = [(205, 0.05)]
         penalty = _calc_weighted_snp_penalty(
-            snps, primer_genomic_start=200, primer_length=20,
-            orientation="reverse", base_weight=10.0,
-            three_prime_window=5, three_prime_multiplier=3.0,
+            snps,
+            primer_genomic_start=200,
+            primer_length=20,
+            orientation="reverse",
+            base_weight=10.0,
+            three_prime_window=5,
+            three_prime_multiplier=3.0,
         )
         assert penalty == 10.0 * 1.0
 
@@ -864,9 +872,13 @@ class TestCalcWeightedSnpPenalty:
         """SNP at pos 219 -> dist=19 from 3', base weight."""
         snps = [(219, 0.05)]
         penalty = _calc_weighted_snp_penalty(
-            snps, primer_genomic_start=200, primer_length=20,
-            orientation="reverse", base_weight=10.0,
-            three_prime_window=5, three_prime_multiplier=3.0,
+            snps,
+            primer_genomic_start=200,
+            primer_length=20,
+            orientation="reverse",
+            base_weight=10.0,
+            three_prime_window=5,
+            three_prime_multiplier=3.0,
         )
         assert penalty == 10.0 * 1.0
 
@@ -876,17 +888,25 @@ class TestCalcWeightedSnpPenalty:
         # SNP at 119 (dist=0, boosted) + SNP at 100 (dist=19, base)
         snps = [(119, 0.05), (100, 0.02)]
         penalty = _calc_weighted_snp_penalty(
-            snps, primer_genomic_start=100, primer_length=20,
-            orientation="forward", base_weight=10.0,
-            three_prime_window=5, three_prime_multiplier=3.0,
+            snps,
+            primer_genomic_start=100,
+            primer_length=20,
+            orientation="forward",
+            base_weight=10.0,
+            three_prime_window=5,
+            three_prime_multiplier=3.0,
         )
         assert penalty == (10.0 * 3.0) + (10.0 * 1.0)
 
     def test_empty_snps(self):
         """No SNPs -> zero penalty."""
         penalty = _calc_weighted_snp_penalty(
-            [], primer_genomic_start=100, primer_length=20,
-            orientation="forward", base_weight=10.0,
-            three_prime_window=5, three_prime_multiplier=3.0,
+            [],
+            primer_genomic_start=100,
+            primer_length=20,
+            orientation="forward",
+            base_weight=10.0,
+            three_prime_window=5,
+            three_prime_multiplier=3.0,
         )
         assert penalty == 0.0

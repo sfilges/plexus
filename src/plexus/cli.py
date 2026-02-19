@@ -3,8 +3,8 @@
 #
 # Thin wrapper around the pipeline module.
 #
-# Author: Stefan Filges (stefan@simsendiagnostics.com)
-# Copyright (c) 2025 Simsen Diagnostics AB
+# Author: Stefan Filges (stefan.filges@pm.me)
+# Copyright (c) 2026 Stefan Filges
 # ================================================================================
 
 from pathlib import Path
@@ -275,40 +275,23 @@ def run(
 
 
 @app.command()
-def download_resources(
-    force: Annotated[
-        bool,
-        typer.Option(
-            "--force",
-            help="Re-download even if files already exist.",
-        ),
-    ] = False,
-) -> None:
-    """Download the gnomAD AF-only VCF for SNP checking."""
-    from plexus.snpcheck.resources import download_gnomad_vcf, get_cache_dir
-
-    console.print("[bold green]Plexus[/bold green] — downloading SNP resources")
-    console.print(f"  Cache directory: {get_cache_dir()}")
-    console.print()
-
-    try:
-        vcf_path = download_gnomad_vcf(force=force)
-        console.print()
-        console.print(f"[bold green]Done![/bold green] VCF saved to {vcf_path}")
-    except Exception as e:
-        console.print(f"[bold red]Download failed: {e}[/bold red]")
-        raise typer.Exit(code=1) from e
-
-
-@app.command()
 def status() -> None:
     """Show Plexus version and resource status."""
     from plexus.resources import GENOME_PRESETS, genome_status
     from plexus.snpcheck.resources import resource_status_message
+    from plexus.utils.env import check_executable
 
     console.print(f"[bold green]Plexus[/bold green] version {__version__}")
     console.print(f"  {resource_status_message()}")
     console.print()
+
+    # Tool status
+    console.print("[bold]System dependencies:[/bold]")
+    marks = {True: "[green]✓[/green]", False: "[red]✗[/red]"}
+    for tool in ["blastn", "makeblastdb", "blast_formatter", "bcftools"]:
+        console.print(f"  {tool:<15} {marks[check_executable(tool)]}")
+    console.print()
+
     console.print("[bold]Genome resources:[/bold]")
     for g in GENOME_PRESETS:
         s = genome_status(g)

@@ -5,8 +5,8 @@
 # primer binding sites. Primers with SNP overlaps receive a penalty that
 # feeds into the multiplex optimizer via pair_penalty.
 #
-# Author: Stefan Filges (stefan@simsendiagnostics.com)
-# Copyright (c) 2025-2026 Simsen Diagnostics AB
+# Author: Stefan Filges (stefan.filges@pm.me)
+# Copyright (c) 2025-2026 Stefan Filges
 # ================================================================================
 
 from __future__ import annotations
@@ -110,7 +110,9 @@ def _calc_weighted_snp_penalty(
         # Clamp to valid range (BLAST coords may be slightly off)
         dist_from_3prime = max(0, dist_from_3prime)
 
-        multiplier = three_prime_multiplier if dist_from_3prime < three_prime_window else 1.0
+        multiplier = (
+            three_prime_multiplier if dist_from_3prime < three_prime_window else 1.0
+        )
         penalty += base_weight * multiplier
     return penalty
 

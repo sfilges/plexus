@@ -93,7 +93,7 @@ Use `--parallel` to run panels concurrently.
 SNP checking requires the bundled gnomAD VCF. Download it once before the first run:
 
 ```bash
-plexus download-resources
+plexus init
 ```
 
 Check resource status at any time:

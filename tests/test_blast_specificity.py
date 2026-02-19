@@ -120,8 +120,8 @@ class TestIsOnTarget:
         pair = self._make_pair(fwd_start=10, rev_start=180)
         prod = {
             "chrom": "chr7",
-            "F_start": 1010,   # design_start + fwd_start = 1000 + 10
-            "R_start": 1180,   # design_start + rev_start = 1000 + 180
+            "F_start": 1010,  # design_start + fwd_start = 1000 + 10
+            "R_start": 1180,  # design_start + rev_start = 1000 + 180
         }
         assert _is_on_target(prod, junction, pair) is True
 
@@ -166,8 +166,8 @@ class TestIsOnTarget:
         pair = self._make_pair(fwd_start=10, rev_start=180)
         prod = {
             "chrom": "chr7",
-            "F_start": 1013,   # 3bp off from expected 1010
-            "R_start": 1183,   # 3bp off from expected 1180
+            "F_start": 1013,  # 3bp off from expected 1010
+            "R_start": 1183,  # 3bp off from expected 1180
         }
         assert _is_on_target(prod, junction, pair) is True
 
@@ -177,7 +177,7 @@ class TestIsOnTarget:
         pair = self._make_pair(fwd_start=10, rev_start=180)
         prod = {
             "chrom": "chr7",
-            "F_start": 1016,   # 6bp off from expected 1010
+            "F_start": 1016,  # 6bp off from expected 1010
             "R_start": 1180,
         }
         assert _is_on_target(prod, junction, pair) is False

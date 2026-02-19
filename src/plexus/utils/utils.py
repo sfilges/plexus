@@ -123,7 +123,11 @@ def generate_kmers(
             kmer = target_sequence[x : x + k]
 
             if check_kmer(
-                kmer, max_poly_X=max_poly_X, max_N=max_N, min_gc=min_gc, max_gc=max_gc,
+                kmer,
+                max_poly_X=max_poly_X,
+                max_N=max_N,
+                min_gc=min_gc,
+                max_gc=max_gc,
                 gc_clamp=gc_clamp,
             ):
                 kmer_filtered_counter += 1
@@ -154,7 +158,9 @@ def generate_kmers(
     return kmers
 
 
-def check_gc_clamp(kmer: str, window: int = 5, min_gc: int = 1, max_gc: int = 3) -> bool:
+def check_gc_clamp(
+    kmer: str, window: int = 5, min_gc: int = 1, max_gc: int = 3
+) -> bool:
     """Check that the 3' end has an acceptable number of G/C bases.
 
     Returns True if the primer passes (1-3 G/C in last 5 bases), False otherwise.

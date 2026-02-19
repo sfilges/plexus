@@ -6,8 +6,8 @@
 # it with panel target regions via bcftools to produce a small
 # region-specific VCF.
 #
-# Author: Stefan Filges (stefan@simsendiagnostics.com)
-# Copyright (c) 2025-2026 Simsen Diagnostics AB
+# Author: Stefan Filges (stefan.filges@pm.me)
+# Copyright (c) 2026 Stefan Filges
 # ================================================================================
 
 from __future__ import annotations
@@ -26,12 +26,14 @@ from plexus.snpcheck.resources import (
     get_cached_vcf_path,
     is_resource_available,
 )
+from plexus.utils.env import check_executable
 
 
 def _check_bcftools() -> str:
     """Verify bcftools is available and return the path."""
+
     bcftools = shutil.which("bcftools")
-    if bcftools is None:
+    if bcftools is None or not check_executable("bcftools"):
         raise RuntimeError(
             "bcftools is required for SNP checking but was not found on PATH. "
             "Install with: conda install -c bioconda bcftools"
@@ -204,7 +206,7 @@ def get_snp_vcf(
     # 4. Nothing available — actionable error
     raise FileNotFoundError(
         "No SNP VCF available. Options:\n"
-        "  1. Run `plexus download-resources` to download the gnomAD VCF\n"
+        "  1. Run `plexus init` to download the gnomAD VCF\n"
         "  2. Provide a VCF via --snp-vcf /path/to/snps.vcf.gz\n"
         "  3. Set $PLEXUS_SNP_VCF=/path/to/snps.vcf.gz\n"
         "  4. Skip SNP checking with --skip-snpcheck"

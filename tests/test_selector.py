@@ -74,9 +74,15 @@ class TestBruteForce:
             {
                 "target_id": ["T1"] * 3 + ["T2"] * 3 + ["T3"] * 3,
                 "pair_name": [
-                    "P1a", "P1b", "P1c",
-                    "P2a", "P2b", "P2c",
-                    "P3a", "P3b", "P3c",
+                    "P1a",
+                    "P1b",
+                    "P1c",
+                    "P2a",
+                    "P2b",
+                    "P2c",
+                    "P3a",
+                    "P3b",
+                    "P3c",
                 ],
             }
         )

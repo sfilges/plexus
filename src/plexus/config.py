@@ -3,8 +3,8 @@
 #
 # Uses Pydantic for runtime validation of configuration parameters.
 #
-# Author: Stefan Filges (stefan@simsendiagnostics.com)
-# Copyright (c) 2025 Simsen Diagnostics AB
+# Author: Stefan Filges (stefan.filges@pm.me)
+# Copyright (c) 2026 Stefan Filges
 # ================================================================================
 
 from __future__ import annotations
@@ -63,7 +63,9 @@ class SingleplexDesignParameters(BaseModel):
     primer_min_gc: int = Field(default=30, ge=0, le=100)
     primer_max_gc: int = Field(default=70, ge=0, le=100)
     primer_gc_clamp: int = Field(
-        default=0, ge=0, le=5,
+        default=0,
+        ge=0,
+        le=5,
         description="Enable 3' GC clamp filter (0=off, 1=on). Requires 1-3 G/C in last 5 bases.",
     )
 
@@ -205,11 +207,14 @@ class SnpCheckParameters(BaseModel):
         default=10.0, ge=0.0, description="Base penalty per SNP overlapping a primer"
     )
     snp_3prime_window: int = Field(
-        default=5, ge=1, le=15,
+        default=5,
+        ge=1,
+        le=15,
         description="Number of bases from 3' end considered high-impact",
     )
     snp_3prime_multiplier: float = Field(
-        default=3.0, ge=1.0,
+        default=3.0,
+        ge=1.0,
         description="Penalty multiplier for SNPs within the 3' window",
     )
     snp_strict: bool = Field(

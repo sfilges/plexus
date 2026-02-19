@@ -4,8 +4,8 @@
 # Reads input CSV, groups junctions by optional Panel column,
 # writes per-panel temporary CSVs, and runs run_pipeline() for each.
 #
-# Author: Stefan Filges (stefan@simsendiagnostics.com)
-# Copyright (c) 2025 Simsen Diagnostics AB
+# Author: Stefan Filges (stefan.filges@pm.me)
+# Copyright (c) 2026 Stefan Filges
 # ================================================================================
 
 from __future__ import annotations

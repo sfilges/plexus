@@ -4,8 +4,8 @@
 # Manages reference genome resources: FASTA downloads, BLAST indexes, and
 # the genome registry (~/.plexus/data/registry.json).
 #
-# Author: Stefan Filges (stefan@simsendiagnostics.com)
-# Copyright (c) 2025-2026 Simsen Diagnostics AB
+# Author: Stefan Filges (stefan.filges@pm.me)
+# Copyright (c) 2026 Stefan Filges
 # ================================================================================
 
 from __future__ import annotations

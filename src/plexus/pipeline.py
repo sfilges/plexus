@@ -8,8 +8,8 @@
 #   4. Multiplex optimization — select best primer combination
 #   5. Save outputs
 #
-# Author: Stefan Filges (stefan@simsendiagnostics.com)
-# Copyright (c) 2025 Simsen Diagnostics AB
+# Author: Stefan Filges (stefan.filges@pm.me)
+# Copyright (c) 2026 Stefan Filges
 # ================================================================================
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from plexus.config import DesignerConfig, load_config
 from plexus.designer.design import design_primers
 from plexus.designer.multiplexpanel import MultiplexPanel, panel_factory
 from plexus.logging import configure_file_logging
+from plexus.utils.env import get_missing_tools
 
 
 @dataclass
@@ -172,6 +173,17 @@ def run_pipeline(
         raise FileNotFoundError(f"Input file not found: {input_file}")
     if not fasta_file.exists():
         raise FileNotFoundError(f"FASTA file not found: {fasta_file}")
+
+    # --- Pre-flight dependency check ---
+    missing = get_missing_tools(need_blast=run_blast, need_snp=not skip_snpcheck)
+    if missing:
+        msg = (
+            f"Missing required system dependencies: {', '.join(missing)}. "
+            "Install them via conda: 'conda install -c bioconda blast bcftools' "
+            "or your system package manager."
+        )
+        logger.error(msg)
+        raise RuntimeError(msg)
 
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -442,12 +454,8 @@ def run_pipeline(
                 }
                 for fj in result.failed_junctions
             ]
-            pd.DataFrame(rows).to_csv(
-                output_dir / "failed_junctions.csv", index=False
-            )
-            logger.info(
-                f"Wrote {len(rows)} failed junction(s) to failed_junctions.csv"
-            )
+            pd.DataFrame(rows).to_csv(output_dir / "failed_junctions.csv", index=False)
+            logger.info(f"Wrote {len(rows)} failed junction(s) to failed_junctions.csv")
 
         result.steps_completed.append("final_results_saved")
     except Exception as e:

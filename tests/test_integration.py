@@ -140,7 +140,9 @@ class TestFullPipelineWithBlast:
     """
 
     @pytest.fixture(scope="class")
-    def blast_pipeline_result(self, fixture_csv, fixture_fasta, fixture_vcf, tmp_path_factory):
+    def blast_pipeline_result(
+        self, fixture_csv, fixture_fasta, fixture_vcf, tmp_path_factory
+    ):
         tmp_dir = tmp_path_factory.mktemp("blast_integration")
         result = run_pipeline(
             input_file=fixture_csv,

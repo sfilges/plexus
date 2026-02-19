@@ -33,7 +33,7 @@ The system is designed as a modular pipeline orchestrated by a high-level contro
         *   *CSV output*: `Forward_Full_Seq` / `Reverse_Full_Seq` columns in `candidate_pairs.csv` and `selected_multiplex.csv` contain the original tail (Ns preserved) concatenated with the binding sequence, providing ready-to-order sequences. BLAST, Tm, GC%, and hairpin calculations all continue to use the bare binding sequence.
 
 4.  **SNP Check (`snpcheck/`)**:
-    *   Checks primers against a VCF file (default: bundled gnomAD AF-only VCF, downloaded via `plexus download-resources`).
+    *   Checks primers against a VCF file (default: bundled gnomAD AF-only VCF, downloaded via `plexus init`).
     *   Calculates penalties based on allele frequency and position relative to the 3′ end.
     *   `--snp-strict` mode discards any pair that overlaps a SNP above the AF threshold.
 
@@ -104,7 +104,7 @@ graph TD
 
 3.  **Download SNP resources** (required before first SNP check):
     ```bash
-    plexus download-resources
+    plexus init
     ```
 
 4.  **Run tests**:
