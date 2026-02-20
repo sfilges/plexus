@@ -429,6 +429,76 @@ on a failed run.
 
 ---
 
+### ~~ARCH-04 · Remove genome download functionality~~ ✅ Fixed in v0.5.1
+
+**Severity: Important · Files: `src/plexus/resources.py`, `src/plexus/snpcheck/resources.py`, `src/plexus/cli.py`**
+
+The `--download` flag on `plexus init` and the associated download infrastructure
+(`_download_fasta()`, `_download_with_progress()`, `download_gnomad_vcf()`) pull reference
+files from third-party URLs (UCSC, GATK GCS bucket) at runtime. This is a convenience for
+exploratory research but is actively harmful for the intended clinical use case:
+
+- **No chain of custody.** Downloaded files have no validated provenance — they come from a
+  URL, not from an institution's verified data store.
+- **Fragile.** URLs rot, GCS bucket policies change, and UCSC periodically reorganizes paths.
+  A broken URL in a clinical tool is disproportionately disruptive.
+- **Contradicts the compliance philosophy.** Compliance mode is built around users bringing
+  their own verified resources. Providing a download shortcut signals the wrong workflow.
+
+For ctDNA panels specifically, the reference FASTA and gnomAD VCF are large, stable, and
+typically already available from institutional storage. No user running a clinical panel
+should be downloading a 3.1 GB genome at pipeline runtime.
+
+**Fix:** Removed `_download_fasta()`, `_download_with_progress()` from `resources.py` and
+`download_gnomad_vcf()`, `_download_with_progress()` from `snpcheck/resources.py`. Removed
+`--download` flag from `plexus init` and the `download` parameter from `init_genome()`.
+`GENOME_PRESETS` is now a name-validation registry containing only `description`. The VCF
+fallback in `get_snp_vcf()` now looks up the registry (via `get_registered_snp_vcf()`)
+instead of checking a download cache. All download tests removed; init tests cover only the
+local file registration path.
+
+---
+
+### ARCH-05 · Allow registry use in compliance mode
+
+**Severity: Important · Files: `src/plexus/cli.py`, `src/plexus/resources.py`**
+
+Compliance mode currently disables the genome registry entirely, requiring `--fasta` on every
+`plexus run` invocation. This conflates two independent concerns:
+
+- **Statelessness** — required for containers (no persistent `~/.plexus/`)
+- **Checksum enforcement** — required for compliance
+
+Containers are stateless as a natural consequence of having no persistent volume for
+`~/.plexus/`, not because of anything in the compliance mode code. On a non-containerized
+clinical workstation — the common deployment for a diagnostic lab — the registry is a
+legitimate and auditable workflow: register the validated FASTA once, run for hundreds of
+patients without repeating the path, and rely on `--strict` (auto-enabled in compliance mode)
+to verify the checksum on every run.
+
+The current restriction forces clinical workstation users to type `--fasta /path/to/hg38.fa`
+on every invocation with no compliance benefit, since the registry already stores and verifies
+the exact same checksum.
+
+**Required change:**
+
+1. Remove the `if op_mode == "compliance": ... raise typer.Exit(code=1)` guard that blocks
+   registry lookup when `--fasta` is omitted in `cli.py`.
+2. Compliance mode should instead guarantee that `--strict` is always active. Registry lookup
+   proceeds normally; checksum verification is enforced because `should_verify` is always
+   `True` in compliance mode. This is already the case when `--fasta` *is* provided — extend
+   it to the registry fallback path.
+3. The container use case is unaffected: without a mounted `~/.plexus/` volume, the registry
+   is simply empty and the existing "genome not initialized" error fires, prompting the user
+   to provide `--fasta` explicitly.
+4. Update the compliance guide and `plexus status` output to reflect that the registry is
+   usable in compliance mode with automatic checksum enforcement.
+
+**Tests to update:** `tests/test_cli.py` — replace the "compliance requires --fasta" assertion
+with "compliance with registry fallback verifies checksums and fails on mismatch".
+
+---
+
 ## v1.1 — Enhanced Specificity Analysis
 
 v1.1 focuses on improving the scientific accuracy of the BLAST-based specificity check,
@@ -653,4 +723,7 @@ project.
 | REPR-02 | Random seed for stochastic selectors | v1.0 | Important | |
 | AUDT-02 | Include `primer3-py` in compliance manifest | v1.0 | Important | |
 | AUDT-03 | Record run success/failure status in `provenance.json` | v1.0 | Important | |
+| SCI-01 | Weight SNP penalties by allele frequency | v1.0 | Important | |
+| ~~ARCH-04~~ | ~~Remove genome download functionality~~ | ~~v1.0~~ | ~~Important~~ | ✅ v0.5.1 |
+| ARCH-05 | Allow registry use in compliance mode | v1.0 | Important | |
 | TEST-01 | End-to-end integration test with real BLAST | v1.1 | Important | |

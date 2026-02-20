@@ -576,16 +576,16 @@ class TestCLIShortFlags:
 
 
 class TestInitNewFlags:
-    """Tests for --download, --mode, --checksums flags on init."""
+    """Tests for --mode, --checksums flags on init."""
 
-    def test_init_requires_fasta_without_download(self):
-        """init without --download and without --fasta should error."""
+    def test_init_requires_fasta(self):
+        """init without --fasta should error."""
         result = runner.invoke(app, ["init", "--genome", "hg38", "--skip-snp"])
         assert result.exit_code == 1
         assert "--fasta" in (result.output + (result.stderr or ""))
 
-    def test_init_requires_snp_vcf_without_download(self):
-        """init without --download and without --snp-vcf should error (unless --skip-snp)."""
+    def test_init_requires_snp_vcf(self):
+        """init without --snp-vcf should error (unless --skip-snp)."""
         with tempfile.NamedTemporaryFile(suffix=".fa", delete=False) as fa_f:
             fasta_path = fa_f.name
             fa_f.write(b">chr1\nACGT\n")
@@ -597,24 +597,6 @@ class TestInitNewFlags:
             assert "--snp-vcf" in (result.output + (result.stderr or ""))
         finally:
             Path(fasta_path).unlink()
-
-    @patch("plexus.resources.init_genome")
-    @patch("plexus.resources.genome_status")
-    @patch("plexus.resources.get_operational_mode", return_value="research")
-    def test_init_with_download_flag(self, _mock_mode, mock_status, mock_init):
-        """init with --download should pass download=True to init_genome."""
-        mock_status.return_value = {
-            "fasta": True,
-            "fai": True,
-            "blast_db": True,
-            "snp_vcf": True,
-            "fasta_sha256": "a" * 64,
-            "snp_vcf_sha256": None,
-        }
-        result = runner.invoke(app, ["init", "--genome", "hg38", "--download"])
-        assert result.exit_code == 0
-        call_kwargs = mock_init.call_args[1]
-        assert call_kwargs["download"] is True
 
     @patch("plexus.resources.init_genome")
     @patch("plexus.resources.genome_status")
@@ -644,7 +626,7 @@ class TestInitNewFlags:
 
     def test_init_invalid_mode(self):
         """init with invalid mode exits with error."""
-        result = runner.invoke(app, ["init", "--mode", "invalid_mode", "--download"])
+        result = runner.invoke(app, ["init", "--mode", "invalid_mode"])
         assert result.exit_code == 1
         assert "Invalid mode" in (result.output + (result.stderr or ""))
 

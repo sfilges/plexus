@@ -1,8 +1,8 @@
 # ================================================================================
 # Genome resource management — presets, registry, and init orchestration
 #
-# Manages reference genome resources: FASTA downloads, BLAST indexes, and
-# the genome registry (~/.plexus/data/registry.json).
+# Manages reference genome resources: FASTA indexing and the genome registry
+# (~/.plexus/data/registry.json).
 #
 # Author: Stefan Filges (stefan.filges@pm.me)
 # Copyright (c) 2026 Stefan Filges
@@ -10,12 +10,10 @@
 
 from __future__ import annotations
 
-import gzip
 import hashlib
 import json
 import os
 import subprocess
-import urllib.request
 from pathlib import Path
 
 from loguru import logger
@@ -49,23 +47,6 @@ def get_cache_dir() -> Path:
 GENOME_PRESETS: dict[str, dict] = {
     "hg38": {
         "description": "Human GRCh38/hg38",
-        # FASTA
-        "fasta_url": (
-            "https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz"
-        ),
-        "fasta_filename": "hg38.fa",
-        "fasta_size_note": "~900 MB compressed / ~3.1 GB uncompressed",
-        # SNP VCF — gnomAD AF-only from GATK best-practices bucket
-        "snp_vcf_url": (
-            "https://storage.googleapis.com/gatk-best-practices/somatic-hg38/"
-            "af-only-gnomad.hg38.vcf.gz"
-        ),
-        "snp_tbi_url": (
-            "https://storage.googleapis.com/gatk-best-practices/somatic-hg38/"
-            "af-only-gnomad.hg38.vcf.gz.tbi"
-        ),
-        "snp_vcf_filename": "af-only-gnomad.hg38.vcf.gz",
-        "snp_tbi_filename": "af-only-gnomad.hg38.vcf.gz.tbi",
     },
 }
 
@@ -311,6 +292,22 @@ def is_fai_ready(fasta_path: Path) -> bool:
     return Path(str(fasta_path) + ".fai").is_file()
 
 
+def get_registered_snp_vcf(genome: str) -> Path | None:
+    """Return the registered SNP VCF path for *genome*, or None if absent/missing."""
+    registry = _load_registry()
+    entry = registry.get(genome)
+    if not entry:
+        return None
+    vcf_str = entry.get("snp_vcf")
+    if not vcf_str:
+        return None
+    vcf_path = Path(vcf_str)
+    if not vcf_path.is_file():
+        logger.warning(f"Registered SNP VCF for '{genome}' not found at {vcf_path}")
+        return None
+    return vcf_path
+
+
 def genome_status(genome: str) -> dict:
     """Return readiness flags and checksums for all resources of *genome*.
 
@@ -319,135 +316,18 @@ def genome_status(genome: str) -> dict:
     dict with bool flags (fasta, fai, blast_db, snp_vcf) and optional
     checksum strings (fasta_sha256, snp_vcf_sha256).
     """
-    from plexus.snpcheck.resources import is_resource_available
-
     registry = _load_registry()
     entry = registry.get(genome, {})
     fasta = get_registered_fasta(genome)
+    snp_vcf = get_registered_snp_vcf(genome)
     return {
         "fasta": fasta is not None,
         "fai": fasta is not None and is_fai_ready(fasta),
         "blast_db": fasta is not None and is_blast_db_ready(fasta),
-        "snp_vcf": is_resource_available(),
+        "snp_vcf": snp_vcf is not None,
         "fasta_sha256": entry.get("fasta_sha256"),
         "snp_vcf_sha256": entry.get("snp_vcf_sha256"),
     }
-
-
-# ---------------------------------------------------------------------------
-# Download helpers
-# ---------------------------------------------------------------------------
-
-
-def _download_with_progress(url: str, dest: Path) -> None:
-    """Download *url* to *dest* with a rich progress bar (atomic .part pattern)."""
-    from rich.progress import (
-        BarColumn,
-        DownloadColumn,
-        Progress,
-        TextColumn,
-        TimeRemainingColumn,
-        TransferSpeedColumn,
-    )
-
-    part = dest.with_suffix(dest.suffix + ".part")
-
-    try:
-        response = urllib.request.urlopen(url)  # noqa: S310
-        total = int(response.headers.get("Content-Length", 0))
-
-        with (
-            Progress(
-                TextColumn("[bold blue]{task.fields[filename]}"),
-                BarColumn(),
-                DownloadColumn(),
-                TransferSpeedColumn(),
-                TimeRemainingColumn(),
-            ) as progress,
-            part.open("wb") as f,
-        ):
-            task = progress.add_task(
-                "download",
-                total=total or None,
-                filename=dest.name,
-            )
-            while True:
-                chunk = response.read(1024 * 256)  # 256 KB chunks
-                if not chunk:
-                    break
-                f.write(chunk)
-                progress.advance(task, len(chunk))
-
-        part.rename(dest)
-    except Exception:
-        part.unlink(missing_ok=True)
-        raise
-
-
-def _download_fasta(genome: str) -> Path:
-    """Download and decompress the FASTA for *genome* into the genome cache dir.
-
-    Returns
-    -------
-    Path to the uncompressed .fa file.
-    """
-    from rich.progress import (
-        BarColumn,
-        Progress,
-        TextColumn,
-        TimeRemainingColumn,
-        TransferSpeedColumn,
-    )
-
-    preset = GENOME_PRESETS[genome]
-    genome_dir = get_cache_dir() / "genomes" / genome
-    genome_dir.mkdir(parents=True, exist_ok=True)
-
-    gz_dest = genome_dir / (preset["fasta_filename"] + ".gz")
-    fa_dest = genome_dir / preset["fasta_filename"]
-
-    # Download compressed FASTA
-    logger.info(
-        f"Downloading {genome} FASTA ({preset['fasta_size_note']}) from UCSC ..."
-    )
-    _download_with_progress(preset["fasta_url"], gz_dest)
-
-    # Decompress with progress tracking on compressed bytes consumed
-    gz_size = gz_dest.stat().st_size
-    logger.info(f"Decompressing {gz_dest.name} ...")
-
-    try:
-        with (
-            Progress(
-                TextColumn("[bold blue]{task.fields[filename]}"),
-                BarColumn(),
-                TransferSpeedColumn(),
-                TimeRemainingColumn(),
-            ) as progress,
-            gzip.open(gz_dest, "rb") as gz_f,
-            fa_dest.open("wb") as out_f,
-        ):
-            task = progress.add_task(
-                "decompress",
-                total=gz_size,
-                filename=gz_dest.name,
-            )
-            last_compressed_pos = 0
-            while True:
-                chunk = gz_f.read(1024 * 256)
-                if not chunk:
-                    break
-                out_f.write(chunk)
-                # Track progress via position in the compressed file
-                current_pos = gz_f.fileobj.tell()
-                progress.advance(task, current_pos - last_compressed_pos)
-                last_compressed_pos = current_pos
-    except Exception:
-        fa_dest.unlink(missing_ok=True)
-        raise
-
-    gz_dest.unlink()
-    return fa_dest
 
 
 # ---------------------------------------------------------------------------
@@ -489,7 +369,6 @@ def init_genome(
     force: bool = False,
     skip_blast: bool = False,
     skip_snp: bool = False,
-    download: bool = False,
     mode: str | None = None,
     checksums: Path | None = None,
 ) -> None:
@@ -498,21 +377,16 @@ def init_genome(
     Parameters
     ----------
     genome     : Genome name, must be a key in GENOME_PRESETS.
-    fasta      : Path to a local FASTA. Required unless *download* is True.
-    snp_vcf    : Path to a local gnomAD VCF. Required unless *download* or
-                 *skip_snp* is True.
-    force      : Rebuild/re-download even if resources already exist.
+    fasta      : Path to a local FASTA. Required.
+    snp_vcf    : Path to a local gnomAD VCF. Required unless *skip_snp* is True.
+    force      : Rebuild indexes even if resources already exist.
     skip_blast : Skip BLAST index creation.
     skip_snp   : Skip SNP VCF step entirely.
-    download   : Download FASTA and/or VCF from preset URLs when local
-                 paths are not provided.
     mode       : If given, set the operational mode ('research' or 'compliance').
     checksums  : Path to a sha256sum-format checksums file. When provided,
                  on-disk files are verified against expected hashes before
                  registration. A mismatch raises ``ValueError``.
     """
-    from plexus.snpcheck.resources import download_gnomad_vcf
-
     if genome not in GENOME_PRESETS:
         supported = ", ".join(GENOME_PRESETS)
         raise ValueError(f"Unknown genome '{genome}'. Supported genomes: {supported}")
@@ -536,13 +410,10 @@ def init_genome(
                 raise FileNotFoundError(f"SNP VCF not found: {snp_vcf}")
             logger.info(f"Using user-supplied SNP VCF: {snp_vcf}")
             resolved_vcf = Path(snp_vcf)
-        elif download:
-            logger.info("Downloading gnomAD AF-only VCF ...")
-            resolved_vcf = download_gnomad_vcf(force=force)
         else:
             raise ValueError(
                 "No SNP VCF provided. Pass --snp-vcf /path/to/snps.vcf.gz "
-                "or use --download to fetch the gnomAD VCF automatically."
+                "or use --skip-snp to skip SNP checking."
             )
 
     # ── Step 2: FASTA ────────────────────────────────────────────────────────
@@ -550,13 +421,8 @@ def init_genome(
         if not fasta.is_file():
             raise FileNotFoundError(f"FASTA file not found: {fasta}")
         fasta_path = fasta
-    elif download:
-        fasta_path = _download_fasta(genome)
     else:
-        raise ValueError(
-            "No FASTA provided. Pass --fasta /path/to/genome.fa "
-            "or use --download to fetch the genome automatically."
-        )
+        raise ValueError("No FASTA provided. Pass --fasta /path/to/genome.fa.")
 
     # ── Step 3: FAI index ────────────────────────────────────────────────────
     if not is_fai_ready(fasta_path) or force:

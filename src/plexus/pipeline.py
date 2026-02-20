@@ -395,6 +395,7 @@ def run_pipeline(
                 output_dir=output_dir,
                 user_vcf=snp_vcf,
                 padding=padding,
+                genome=genome,
             )
 
             from plexus.snpcheck.checker import run_snp_check

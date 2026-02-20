@@ -20,11 +20,8 @@ from pathlib import Path
 from loguru import logger
 
 from plexus.designer.multiplexpanel import MultiplexPanel
-from plexus.snpcheck.resources import (
-    ENV_SNP_VCF,
-    get_cached_vcf_path,
-    is_resource_available,
-)
+from plexus.resources import get_registered_snp_vcf
+from plexus.snpcheck.resources import ENV_SNP_VCF
 from plexus.utils.env import check_executable
 from plexus.utils.utils import (
     detect_chrom_naming_mismatch,
@@ -192,13 +189,14 @@ def get_snp_vcf(
     output_dir: Path,
     user_vcf: str | Path | None = None,
     padding: int = 200,
+    genome: str = "hg38",
 ) -> Path:
     """Get a SNP VCF ready for primer checking.
 
     Resolution order:
       1. User-provided VCF (``--snp-vcf``) — used directly
       2. ``$PLEXUS_SNP_VCF`` environment variable — used directly
-      3. Cached gnomAD VCF — intersected with panel regions
+      3. Registered VCF from genome registry — intersected with panel regions
       4. Error with actionable instructions
 
     Parameters
@@ -211,6 +209,8 @@ def get_snp_vcf(
         User-provided VCF path. If given, used directly.
     padding : int
         Extra bases around each junction region.
+    genome : str
+        Genome name for registry lookup (default: 'hg38').
 
     Returns
     -------
@@ -236,18 +236,18 @@ def get_snp_vcf(
         logger.info(f"Using SNP VCF from ${ENV_SNP_VCF}: {env_path}")
         return env_path
 
-    # 3. Cached gnomAD VCF → intersect with panel regions
-    if is_resource_available():
-        cached_vcf = get_cached_vcf_path()
-        logger.info(f"Using cached gnomAD VCF: {cached_vcf}")
+    # 3. Registered VCF from genome registry → intersect with panel regions
+    registered_vcf = get_registered_snp_vcf(genome)
+    if registered_vcf is not None:
+        logger.info(f"Using registered SNP VCF: {registered_vcf}")
         return intersect_vcf_with_regions(
-            cached_vcf, panel, output_dir, padding=padding
+            registered_vcf, panel, output_dir, padding=padding
         )
 
     # 4. Nothing available — actionable error
     raise FileNotFoundError(
         "No SNP VCF available. Options:\n"
-        "  1. Run `plexus init` to download the gnomAD VCF\n"
+        "  1. Register a VCF via `plexus init --snp-vcf /path/to/snps.vcf.gz`\n"
         "  2. Provide a VCF via --snp-vcf /path/to/snps.vcf.gz\n"
         "  3. Set $PLEXUS_SNP_VCF=/path/to/snps.vcf.gz\n"
         "  4. Skip SNP checking with --skip-snpcheck"

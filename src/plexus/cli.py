@@ -382,14 +382,12 @@ def run(
 def status() -> None:
     """Show Plexus version and resource status."""
     from plexus.resources import GENOME_PRESETS, genome_status, get_operational_mode
-    from plexus.snpcheck.resources import resource_status_message
     from plexus.utils.env import check_executable
 
     op_mode = get_operational_mode()
 
     console.print(f"[bold green]Plexus[/bold green] version {__version__}")
     console.print(f"  Mode: [bold]{op_mode}[/bold]")
-    console.print(f"  {resource_status_message()}")
     console.print()
 
     # Tool status
@@ -457,14 +455,6 @@ def init(
             "--force", help="Rebuild indexes even if resources already exist."
         ),
     ] = False,
-    download: Annotated[
-        bool,
-        typer.Option(
-            "--download",
-            help="Download FASTA and/or gnomAD VCF from preset URLs. "
-            "Without this flag, --fasta and --snp-vcf are required.",
-        ),
-    ] = False,
     mode: Annotated[
         str | None,
         typer.Option(
@@ -484,8 +474,7 @@ def init(
 ) -> None:
     """Register and index reference resources for a genome.
 
-    Provide --fasta and --snp-vcf to register local files (recommended).
-    Use --download to fetch files from preset URLs instead.
+    Provide --fasta and --snp-vcf to register local files.
     Use --checksums to verify files against known-good hashes.
     """
     from plexus.resources import (
@@ -510,18 +499,15 @@ def init(
         )
         raise typer.Exit(code=1)
 
-    # Validate that sources are provided when not downloading
-    if not download and fasta is None:
+    if fasta is None:
         typer.echo(
-            "Error: --fasta is required when --download is not specified.\n"
-            "Provide a local FASTA file or use --download to fetch one.",
+            "Error: --fasta is required. Provide a local FASTA file.",
             err=True,
         )
         raise typer.Exit(code=1)
-    if not download and snp_vcf is None and not skip_snp:
+    if snp_vcf is None and not skip_snp:
         typer.echo(
-            "Error: --snp-vcf is required when --download is not specified "
-            "(or use --skip-snp to skip SNP checking).",
+            "Error: --snp-vcf is required (or use --skip-snp to skip SNP checking).",
             err=True,
         )
         raise typer.Exit(code=1)
@@ -529,17 +515,9 @@ def init(
     console.print(
         f"[bold green]Plexus[/bold green] — initializing resources for [bold]{genome}[/bold]"
     )
-    if fasta:
-        console.print(f"  FASTA:     {fasta} (local)")
-    elif download:
-        preset = GENOME_PRESETS[genome]
-        console.print(
-            f"  FASTA:     {preset['fasta_size_note']} — downloading from UCSC"
-        )
+    console.print(f"  FASTA:     {fasta}")
     if snp_vcf:
-        console.print(f"  SNP VCF:   {snp_vcf} (local)")
-    elif download and not skip_snp:
-        console.print("  SNP VCF:   downloading gnomAD AF-only VCF from GATK bucket")
+        console.print(f"  SNP VCF:   {snp_vcf}")
     if checksums:
         console.print(f"  Checksums: {checksums}")
     if mode:
@@ -554,7 +532,6 @@ def init(
             force=force,
             skip_blast=skip_blast,
             skip_snp=skip_snp,
-            download=download,
             mode=mode,
             checksums=checksums,
         )

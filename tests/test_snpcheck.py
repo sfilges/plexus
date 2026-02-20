@@ -23,10 +23,7 @@ from plexus.snpcheck.resources import (
     DEFAULT_CACHE_DIR,
     ENV_DATA_DIR,
     ENV_SNP_VCF,
-    GNOMAD_TBI_FILENAME,
-    GNOMAD_VCF_FILENAME,
     get_cache_dir,
-    is_resource_available,
 )
 from plexus.snpcheck.snp_data import (
     _write_regions_bed,
@@ -575,8 +572,8 @@ class TestGetSnpVcf:
             )
         assert result == user_vcf
 
-    def test_cached_gnomad_fallback(self, tmp_path):
-        """When no user VCF or env var, uses cached gnomAD with bcftools intersection."""
+    def test_registered_vcf_fallback(self, tmp_path):
+        """When no user VCF or env var, uses registered VCF with bcftools intersection."""
         panel = _make_panel()
 
         mock_result = MagicMock()
@@ -585,12 +582,8 @@ class TestGetSnpVcf:
 
         with (
             patch(
-                "plexus.snpcheck.snp_data.is_resource_available",
-                return_value=True,
-            ),
-            patch(
-                "plexus.snpcheck.snp_data.get_cached_vcf_path",
-                return_value=tmp_path / "gnomad.vcf.gz",
+                "plexus.snpcheck.snp_data.get_registered_snp_vcf",
+                return_value=tmp_path / "registered.vcf.gz",
             ),
             patch(
                 "plexus.snpcheck.snp_data.get_vcf_contigs",
@@ -599,8 +592,8 @@ class TestGetSnpVcf:
             patch("plexus.snpcheck.snp_data._check_bcftools", return_value="bcftools"),
             patch("subprocess.run", return_value=mock_result) as mock_run,
         ):
-            # Create fake cached file
-            (tmp_path / "gnomad.vcf.gz").touch()
+            # Create fake registered file
+            (tmp_path / "registered.vcf.gz").touch()
 
             result = get_snp_vcf(
                 panel=panel,
@@ -608,15 +601,14 @@ class TestGetSnpVcf:
             )
 
             # bcftools should be called (view -R, index -t)
-            # (get_vcf_contigs is mocked, so its call is not recorded in mock_run)
             assert mock_run.call_count == 2
             assert result == tmp_path / "snpcheck_regions.vcf.gz"
 
     def test_no_vcf_available_raises(self, tmp_path):
         """When nothing is available, should raise with actionable instructions."""
         with patch(
-            "plexus.snpcheck.snp_data.is_resource_available",
-            return_value=False,
+            "plexus.snpcheck.snp_data.get_registered_snp_vcf",
+            return_value=None,
         ):
             with pytest.raises(FileNotFoundError, match="plexus init"):
                 get_snp_vcf(
@@ -642,80 +634,6 @@ class TestCacheDir:
         assert result == tmp_path
 
 
-class TestIsResourceAvailable:
-    def test_both_files_present(self, tmp_path):
-        with patch("plexus.snpcheck.resources.get_cache_dir", return_value=tmp_path):
-            (tmp_path / GNOMAD_VCF_FILENAME).touch()
-            (tmp_path / GNOMAD_TBI_FILENAME).touch()
-            assert is_resource_available() is True
-
-    def test_vcf_missing(self, tmp_path):
-        with patch("plexus.snpcheck.resources.get_cache_dir", return_value=tmp_path):
-            (tmp_path / GNOMAD_TBI_FILENAME).touch()
-            assert is_resource_available() is False
-
-    def test_tbi_missing(self, tmp_path):
-        with patch("plexus.snpcheck.resources.get_cache_dir", return_value=tmp_path):
-            (tmp_path / GNOMAD_VCF_FILENAME).touch()
-            assert is_resource_available() is False
-
-    def test_neither_present(self, tmp_path):
-        with patch("plexus.snpcheck.resources.get_cache_dir", return_value=tmp_path):
-            assert is_resource_available() is False
-
-
-class TestDownloadGnomadVcf:
-    def test_skips_if_already_cached(self, tmp_path):
-        """download_gnomad_vcf should skip download when files exist."""
-        from plexus.snpcheck.resources import download_gnomad_vcf
-
-        with patch("plexus.snpcheck.resources.get_cache_dir", return_value=tmp_path):
-            (tmp_path / GNOMAD_VCF_FILENAME).touch()
-            (tmp_path / GNOMAD_TBI_FILENAME).touch()
-
-            with patch("plexus.snpcheck.resources._download_with_progress") as mock_dl:
-                result = download_gnomad_vcf()
-                mock_dl.assert_not_called()
-            assert result == tmp_path / GNOMAD_VCF_FILENAME
-
-    def test_downloads_when_missing(self, tmp_path):
-        """download_gnomad_vcf should call _download_with_progress for both files."""
-        from plexus.snpcheck.resources import download_gnomad_vcf
-
-        with (
-            patch("plexus.snpcheck.resources.get_cache_dir", return_value=tmp_path),
-            patch("plexus.snpcheck.resources._download_with_progress") as mock_dl,
-        ):
-            download_gnomad_vcf()
-            assert mock_dl.call_count == 2
-
-    def test_force_redownloads(self, tmp_path):
-        """download_gnomad_vcf(force=True) should download even when cached."""
-        from plexus.snpcheck.resources import download_gnomad_vcf
-
-        with patch("plexus.snpcheck.resources.get_cache_dir", return_value=tmp_path):
-            (tmp_path / GNOMAD_VCF_FILENAME).touch()
-            (tmp_path / GNOMAD_TBI_FILENAME).touch()
-
-            with patch("plexus.snpcheck.resources._download_with_progress") as mock_dl:
-                download_gnomad_vcf(force=True)
-                assert mock_dl.call_count == 2
-
-    def test_cleanup_on_failure(self, tmp_path):
-        """Partial .part file should be removed on download failure."""
-        from plexus.snpcheck.resources import _download_with_progress
-
-        dest = tmp_path / "test.vcf.gz"
-
-        with patch("urllib.request.urlopen", side_effect=OSError("network error")):
-            with pytest.raises(OSError, match="network error"):
-                _download_with_progress("http://example.com/file", dest)
-
-        # .part file should not remain
-        assert not dest.with_suffix(".gz.part").exists()
-        assert not dest.exists()
-
-
 # ---------------------------------------------------------------------------
 # CLI commands
 # ---------------------------------------------------------------------------
@@ -723,14 +641,9 @@ class TestDownloadGnomadVcf:
 
 class TestStatusCli:
     def test_shows_version_and_resource_status(self):
-        with patch(
-            "plexus.snpcheck.resources.resource_status_message",
-            return_value="gnomAD VCF: not downloaded",
-        ):
-            result = runner.invoke(app, ["status"])
+        result = runner.invoke(app, ["status"])
         assert result.exit_code == 0
         assert "Plexus" in result.output
-        assert "gnomAD VCF" in result.output
 
 
 # ---------------------------------------------------------------------------
