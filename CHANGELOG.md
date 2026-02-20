@@ -1,11 +1,15 @@
-# Changelog
+## [0.5.2] - 20-02-2026
 
-All notable changes to plexus will be documented in this file.
+### Added
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+- **REPR-02 · Random seed for stochastic selectors**:
+  - New `--selector-seed` flag on `plexus run` for reproducible multiplex optimization.
+  - Stochastic selectors (`GreedySearch`, `RandomSearch`, `SimulatedAnnealing`) now accept an optional seed parameter.
+  - `selector_seed` is recorded in `provenance.json` (and `panel_summary.json`) for auditability.
+  - Added `selector_seed` to `MultiplexPickerParameters` in the design configuration.
+  - Compliance mode issues a warning if a stochastic selector is used without a fixed seed.
 
-## [0.5.0] - 20-02-2026
+## [0.5.1] - 20-02-2026
 
 ### Added
 

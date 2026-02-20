@@ -170,6 +170,13 @@ def run(
             help="Multiplex selector algorithm: Greedy, Random, BruteForce, SimulatedAnnealing, or DFS.",
         ),
     ] = "Greedy",
+    selector_seed: Annotated[
+        int | None,
+        typer.Option(
+            "--selector-seed",
+            help="Random seed for stochastic selectors (Greedy, Random, SimulatedAnnealing).",
+        ),
+    ] = None,
     debug: Annotated[
         bool,
         typer.Option(
@@ -327,6 +334,7 @@ def run(
             snp_af_threshold=snp_af_threshold,
             snp_strict=snp_strict,
             selector=selector,
+            selector_seed=selector_seed,
             debug=debug,
             fasta_sha256=fasta_sha256,
             snp_vcf_sha256=snp_vcf_sha256,

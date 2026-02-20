@@ -337,7 +337,7 @@ is logged in research mode.
 
 ---
 
-### REPR-02 · Random seed for stochastic selectors
+### ~~REPR-02 · Random seed for stochastic selectors~~ ✅ Fixed in v0.5.2
 
 **Severity: Important · Files: `src/plexus/selector/selectors.py`, `src/plexus/pipeline.py`, `src/plexus/cli.py`**
 
@@ -720,7 +720,7 @@ project.
 | REPT-02 | Visual QC Report (HTML) | v1.1 | Low | |
 | SPLIT-01 | Automated Panel Splitting | Future | Future | |
 | REPR-01 | Chromosome naming check at `plexus run` time in compliance mode | v1.0 | Important | |
-| REPR-02 | Random seed for stochastic selectors | v1.0 | Important | |
+| ~~REPR-02~~ | ~~Random seed for stochastic selectors~~ | ~~v1.0~~ | ~~Important~~ | ✅ v0.5.2 |
 | AUDT-02 | Include `primer3-py` in compliance manifest | v1.0 | Important | |
 | AUDT-03 | Record run success/failure status in `provenance.json` | v1.0 | Important | |
 | SCI-01 | Weight SNP penalties by allele frequency | v1.0 | Important | |

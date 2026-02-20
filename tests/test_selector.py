@@ -151,6 +151,74 @@ class TestDepthFirstSearch:
         assert len(results) < 4
 
 
+class TestSelectorReproducibility:
+    @pytest.fixture
+    def large_selector_inputs(self):
+        # Larger fixture to make stochastic differences likely
+        n_targets = 10
+        df = pd.DataFrame(
+            {
+                "target_id": [f"T{i}" for i in range(n_targets) for _ in range(5)],
+                "pair_name": [f"P{i}_{j}" for i in range(n_targets) for j in range(5)],
+            }
+        )
+        cost_fn = MagicMock()
+        # Random but consistent costs for pairs to ensure different paths
+        costs = {p: (hash(p) % 100) / 10.0 for p in df["pair_name"]}
+        cost_fn.calc_cost = lambda pairs: sum(costs[p] for p in pairs)
+        return df, cost_fn
+
+    def test_greedy_reproducibility(self, large_selector_inputs):
+        df, cost_fn = large_selector_inputs
+        seed = 42
+        results1 = GreedySearch(df, cost_fn, seed=seed).run(N=5)
+        results2 = GreedySearch(df, cost_fn, seed=seed).run(N=5)
+
+        for m1, m2 in zip(results1, results2, strict=False):
+            assert m1.primer_pairs == m2.primer_pairs
+            assert m1.cost == pytest.approx(m2.cost)
+
+    def test_random_reproducibility(self, large_selector_inputs):
+        df, cost_fn = large_selector_inputs
+        seed = 123
+        results1 = RandomSearch(df, cost_fn, seed=seed).run(N=5)
+        results2 = RandomSearch(df, cost_fn, seed=seed).run(N=5)
+
+        for m1, m2 in zip(results1, results2, strict=False):
+            assert m1.primer_pairs == m2.primer_pairs
+            assert m1.cost == pytest.approx(m2.cost)
+
+    def test_simulated_annealing_reproducibility(self, large_selector_inputs):
+        df, cost_fn = large_selector_inputs
+        seed = 777
+        results1 = SimulatedAnnealing(df, cost_fn, seed=seed).run(
+            N_restarts=2, steps_per_restart=10
+        )
+        results2 = SimulatedAnnealing(df, cost_fn, seed=seed).run(
+            N_restarts=2, steps_per_restart=10
+        )
+
+        for m1, m2 in zip(results1, results2, strict=False):
+            assert m1.primer_pairs == m2.primer_pairs
+            assert m1.cost == pytest.approx(m2.cost)
+
+    def test_stochastic_without_seed_differs(self, large_selector_inputs):
+        """Verify that without a seed, runs are likely different."""
+        import random
+
+        df, cost_fn = large_selector_inputs
+
+        # Run 1
+        random.seed(1)
+        results1 = GreedySearch(df, cost_fn).run(N=1)
+
+        # Run 2
+        random.seed(2)
+        results2 = GreedySearch(df, cost_fn).run(N=1)
+
+        assert results1[0].primer_pairs != results2[0].primer_pairs
+
+
 # ================================================================================
 # Tests for MultiplexCostFunction
 # ================================================================================

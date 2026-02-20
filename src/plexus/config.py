@@ -170,6 +170,10 @@ class MultiplexPickerParameters(BaseModel):
 
     initial_solutions: int = Field(default=100, ge=1, le=10000)
     top_solutions_to_keep: int = Field(default=4, ge=1, le=100)
+    selector_seed: int | None = Field(
+        default=None,
+        description="Random seed for stochastic selectors (Greedy, Random, SimulatedAnnealing).",
+    )
 
     target_plexity: int = Field(default=20, ge=2, le=500)
     minimum_plexity: int = Field(default=10, ge=1, le=500)

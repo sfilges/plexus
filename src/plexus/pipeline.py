@@ -120,6 +120,7 @@ def _collect_provenance(
     fasta_sha256: str | None = None,
     snp_vcf_sha256: str | None = None,
     compliance_report: dict | None = None,
+    selector_seed: int | None = None,
 ) -> dict:
     """Collect tool versions, resource paths, and checksums for provenance."""
     import datetime
@@ -158,6 +159,7 @@ def _collect_provenance(
         "snp_vcf_sha256": snp_vcf_sha256,
         "run_blast": run_blast,
         "skip_snpcheck": skip_snpcheck,
+        "selector_seed": selector_seed,
     }
 
     if compliance_report is not None:
@@ -182,6 +184,7 @@ def run_pipeline(
     snp_af_threshold: float | None = None,
     snp_strict: bool = False,
     selector: str = "Greedy",
+    selector_seed: int | None = None,
     debug: bool = False,
     fasta_sha256: str | None = None,
     snp_vcf_sha256: str | None = None,
@@ -271,6 +274,17 @@ def run_pipeline(
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Load configuration
+    logger.info("Loading configuration...")
+    config = load_config(
+        preset=preset,
+        config_path=str(config_path) if config_path else None,
+    )
+
+    # Override config seed if provided as argument
+    if selector_seed is not None:
+        config.multiplex_picker_parameters.selector_seed = selector_seed
+
     # ── Write provenance record ──────────────────────────────────────────────
     provenance = _collect_provenance(
         fasta_file=fasta_file,
@@ -281,6 +295,7 @@ def run_pipeline(
         fasta_sha256=fasta_sha256,
         snp_vcf_sha256=snp_vcf_sha256,
         compliance_report=compliance_report,
+        selector_seed=config.multiplex_picker_parameters.selector_seed,
     )
     import json as _json
 
@@ -292,13 +307,6 @@ def run_pipeline(
     log_file = configure_file_logging(str(output_dir), debug=debug)
     logger.info(f"Log file: {log_file}")
     logger.info(f"Provenance written to {provenance_path}")
-
-    # Load configuration
-    logger.info("Loading configuration...")
-    config = load_config(
-        preset=preset,
-        config_path=str(config_path) if config_path else None,
-    )
 
     # =========================================================================
     # Step 1: Create panel and load junctions
@@ -475,8 +483,30 @@ def run_pipeline(
             cost_fn = MultiplexCostFunction(
                 pair_lookup, config.multiplex_picker_parameters
             )
+
+            # Warn if stochastic selector is used without a seed
+            stochastic_selectors = ["Greedy", "Random", "SimulatedAnnealing"]
+            if (
+                selector in stochastic_selectors
+                and config.multiplex_picker_parameters.selector_seed is None
+            ):
+                if op_mode == "compliance":
+                    logger.warning(
+                        f"Compliance mode: stochastic selector '{selector}' used without a seed. "
+                        "This run cannot be identically reproduced."
+                    )
+                else:
+                    logger.info(
+                        f"Stochastic selector '{selector}' used without a seed. "
+                        "Results will vary between runs."
+                    )
+
             selector_cls = selector_collection[selector]
-            selector_obj = selector_cls(selector_df, cost_fn)
+            selector_obj = selector_cls(
+                selector_df,
+                cost_fn,
+                seed=config.multiplex_picker_parameters.selector_seed,
+            )
             logger.info(f"Using '{selector}' selector algorithm.")
             if selector in ("Greedy", "Random"):
                 solutions = selector_obj.run(

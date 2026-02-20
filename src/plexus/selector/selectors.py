@@ -15,9 +15,10 @@ from .multiplex import Multiplex
 
 
 class MultiplexSelector(ABC):
-    def __init__(self, primer_df, cost_function):
+    def __init__(self, primer_df, cost_function, seed: int | None = None):
         self.primer_df = primer_df
         self.cost_function = cost_function
+        self.seed = seed
 
     @abstractmethod
     def run(self):
@@ -53,6 +54,8 @@ class GreedySearch(MultiplexSelector):
         Run a greedy search algorithm for the lowest cost multiplex
 
         """
+        if self.seed is not None:
+            random.seed(self.seed)
 
         # Get every UNIQUE primer pair, for each target
         # NB: from `primer_df` these are doubled, must use set()
@@ -157,6 +160,9 @@ class BruteForce(MultiplexSelector):
 class RandomSearch(MultiplexSelector):
     def run(self, N=10_000):
         """Run the random  selection algorithm"""
+        if self.seed is not None:
+            random.seed(self.seed)
+
         # Get target pairs
         target_pairs = {
             target_id: list(set(target_df["pair_name"]))
@@ -202,6 +208,9 @@ class SimulatedAnnealing(MultiplexSelector):
         T_min=0.01,
         greedy_seed_iterations=100,
     ):
+        if self.seed is not None:
+            random.seed(self.seed)
+
         target_pairs = {
             target_id: list(set(target_df["pair_name"]))
             for target_id, target_df in self.primer_df.groupby("target_id")
