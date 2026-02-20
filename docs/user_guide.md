@@ -12,6 +12,11 @@
 8. [Troubleshooting](#troubleshooting)
 9. [Technical Reference](#technical-reference)
 10. [Compliance and Clinical Use](#compliance-and-clinical-use)
+    - [Two Deployment Paths](#two-compliance-deployment-paths)
+    - [The Compliance Manifest](#the-compliance-manifest)
+    - [Environment Validation](#environment-validation)
+    - [Compliance Provenance Record](#compliance-provenance-record)
+    - [Transitioning from Research to Compliance](#transitioning-from-research-to-compliance)
 
 ## Getting Started
 
@@ -40,34 +45,41 @@ Plexus operates in two distinct modes with different validation requirements:
 
 | Feature | Research Mode | Compliance Mode |
 | ------- | ------------- | --------------- |
-| Checksum Verification | Optional (`--strict` flag) | **Mandatory** |
+| Checksum Verification | Optional (`--strict` flag or `--checksums`) | **Mandatory** |
 | Resource Validation | Warning only | **Error on mismatch** |
-| Provenance Tracking | Basic | **Comprehensive** |
+| Tool Version Enforcement | None | **Exact versions via manifest** |
+| Provenance Tracking | Basic | **Comprehensive + `compliance_environment`** |
 | Audit Requirements | None | **Full documentation** |
-| Performance Impact | None | Minimal (checksum verification) |
-| Use Case | Development, research | Clinical, diagnostic, regulated |
+| Registry Required | Yes (default) | No — `--fasta` explicit, `--checksums` for data |
+| Use Case | Development, research | Clinical, diagnostic, regulated, containerized |
 
 ### Setting Operational Mode
 
-Set the mode during initialization:
+**Priority order** — highest wins:
+
+| Priority | Source | How to set |
+| -------- | ------ | ---------- |
+| 1 | `PLEXUS_MODE` env var | `export PLEXUS_MODE=compliance` or bake into Docker image |
+| 2 | `~/.plexus/config.json` | `plexus init --mode compliance` |
+| 3 (default) | built-in | `research` |
 
 ```bash
-# For clinical/compliance use (MANDATORY checksums)
+# Container / CI: set via env var (no workspace needed)
+export PLEXUS_MODE=compliance
+
+# Local research workstation: persist in config
 plexus init --genome hg38 --mode compliance --checksums my_checksums.sha256
 
-# For research use (default - checksums optional)
-plexus init --genome hg38 --mode research
-
-# Check current mode
+# Check current effective mode (respects env var)
 plexus status
 ```
 
 **Important Compliance Notes:**
 
-- Once set to compliance mode, **all runs will enforce checksum verification**
-- Compliance mode cannot be bypassed without explicitly changing the mode
-- **All resource files must have verified checksums before use**
-- Checksums are stored in `~/.plexus/data/registry.json`
+- The `PLEXUS_MODE` env var **overrides the config file** — it is the authority for containers
+- In compliance mode, `--fasta` is required (registry fallback is disabled)
+- All resource files must have SHA-256 checksums for `--checksums` stateless verification
+- Tool versions are validated against the bundled compliance manifest before any data is touched
 - Provenance information is recorded in each output directory
 
 ### Installation
@@ -236,22 +248,43 @@ Edit the `junctions.csv` with your targets. The required columns are:
 
 ### 3. Resource Setup
 
+There are two distinct resource setup paths — choose based on your deployment context:
+
+**Path A — Local / Research (registry-based):**
+
 ```bash
-# Initialize genome resources
+# Initialize genome resources (registers FASTA + VCF, computes checksums)
 plexus init --genome hg38 --download
 
-# For compliance mode (MANDATORY checksums)
-plexus init --genome hg38 --mode compliance --checksums my_checksums.sha256
+# For compliance mode with verified resources
+plexus init --genome hg38 --mode compliance \
+    --fasta hg38.fa --snp-vcf gnomad.vcf.gz \
+    --checksums my_checksums.sha256
 
 # Check resource status
 plexus status
 ```
 
-**Resource Types:**
+**Path B — Container / Stateless (no registry):**
+
+```bash
+# No init needed — just create a checksums file and pass it at run time
+sha256sum hg38.fa gnomad.vcf.gz > checksums.sha256
+
+# Then at run time:
+PLEXUS_MODE=compliance plexus run \
+    --fasta hg38.fa \
+    --snp-vcf gnomad.vcf.gz \
+    --checksums checksums.sha256 \
+    --input junctions.csv \
+    --output results/
+```
+
+**Resource Types (Path A only):**
 
 - **FASTA**: Reference genome sequence
-- **FAI**: FASTA index file
-- **BLAST DB**: BLAST database for specificity checking
+- **FAI**: FASTA index file (built by `init`)
+- **BLAST DB**: BLAST database for specificity checking (built by `init`)
 - **gnomAD VCF**: SNP database for overlap checking
 
 **Naming Validation:**
@@ -501,6 +534,39 @@ plexus run \
 - Use `--skip-snpcheck` if working with synthetic targets
 - Process panels sequentially if memory is limited
 
+### Docker & Containerized Runs
+
+For consistent execution (especially in clinical use cases), it is recommended to run Plexus via its official Docker image. Plexus includes a `docker` command that simplifies the process of mounting host directories and translating paths.
+
+```bash
+plexus docker \
+  --tag 0.5.0-strict \
+  --input ./data/junctions.csv \
+  --fasta ./data/hg38.fa \
+  --output ./results/run_1
+```
+
+**What the `plexus docker` command does:**
+- **Auto-Mounting**: Automatically creates Docker volume mounts (`-v`) for the parent directories of all your input files (input CSV, FASTA, SNP VCF, config).
+- **Path Translation**: Translates host file paths (e.g. `./data/hg38.fa`) into container-relative paths (e.g. `/mnt/vol0/hg38.fa`).
+- **Audit Consistency**: Ensures that the output directory is mounted correctly and writable.
+
+#### Image Registries and Availability
+The `plexus docker` command uses a **Local-First** approach:
+- **Local Search**: It first checks if the specified image (registry + tag) is available locally on your machine.
+- **Auto-Pull**: If the image is not found locally, it automatically attempts a `docker pull`.
+- **Private Registries**: Use the `--registry` flag to specify a custom registry prefix. You must be authenticated via `docker login` before running.
+- **Forced Update**: Use the `--pull` flag to force an update from the registry even if a local version is found.
+
+```bash
+# Example using a private registry and forcing a pull
+plexus docker \
+  --registry my-internal-registry.com/plexus \
+  --tag 0.5.0-strict \
+  --pull \
+  --input junctions.csv ...
+```
+
 ## Output Interpretation
 
 ### candidate_pairs.csv
@@ -567,14 +633,21 @@ Comprehensive metadata and provenance:
     "total_candidate_pairs": 876,
     "optimization_algorithm": "Greedy",
     "provenance": {
-        "plexus_version": "0.4.6",
+        "plexus_version": "0.5.0",
         "primer3_version": "2.6.1",
-        "run_timestamp": "2023-11-15T14:30:00Z",
+        "run_timestamp": "2026-02-20T14:30:00Z",
+        "operational_mode": "compliance",
         "fasta_path": "/path/to/hg38.fa",
         "fasta_sha256": "a1b2c3...",
         "snp_vcf_path": "/path/to/gnomad.vcf.gz",
+        "snp_vcf_sha256": "d4e5f6...",
         "run_blast": true,
-        "skip_snpcheck": false
+        "skip_snpcheck": false,
+        "compliance_environment": {
+            "manifest_version": "1.0",
+            "blastn": {"expected": "2.17.0", "actual": "2.17.0", "verdict": "pass"},
+            "bcftools": {"expected": "1.23", "actual": "1.23", "verdict": "pass"}
+        }
     },
     "configuration": {...}
 }
@@ -723,6 +796,8 @@ plexus template [OPTIONS]
 | `--skip-snpcheck` | False | Skip SNP overlap check |
 | `--snp-vcf` | Bundled | Custom VCF file path |
 | `--snp-strict` | False | Discard SNP-overlapping primers |
+| `--strict` | False | Verify checksums via registry before running |
+| `--checksums` | None | SHA-256 checksums file for stateless verification |
 | `--parallel` | False | Parallel multi-panel processing |
 
 ### Complete Configuration Parameters
@@ -804,117 +879,183 @@ STRING,STRING,INTEGER,INTEGER,STRING(optional)
 
 ## Compliance and Clinical Use
 
-### Checksum Requirements for Compliance Mode
+### Design Principle
 
-Compliance mode requires SHA-256 checksums for all resource files. Checksums must be provided in `sha256sum` format:
+> **"The code is the authority; the environment is a suspect."**
+
+In compliance mode, Plexus does not trust the environment it runs in. It verifies both **data integrity** (checksums) and **environment integrity** (exact tool versions) before touching any file.
+
+### Authority Hierarchy
+
+| Priority | Authority | What it controls |
+|----------|-----------|-----------------|
+| 1 | Compliance manifest (bundled in package) | Exact tool versions required |
+| 2 | `PLEXUS_MODE` env var | Activates compliance mode — overrides config file |
+| 3 | `~/.plexus/config.json` | Convenience for local workstations |
+
+### Two Compliance Deployment Paths
+
+#### Path A — Local Workstation (Registry-Based)
+
+Use `plexus init` to register resources with checksums. Compliance mode verifies against the registry automatically on every run.
 
 ```bash
-# Create checksums file for your resources
-sha256sum genome.fa > my_checksums.sha256
-sha256sum snps.vcf.gz >> my_checksums.sha256
+# 1. Generate checksums for your validated resources
+sha256sum hg38.fa gnomad.vcf.gz > clinical_checksums.sha256
 
-# Initialize with checksums
+# 2. Initialize in compliance mode
 plexus init \
   --genome hg38 \
   --mode compliance \
-  --fasta genome.fa \
-  --snp-vcf snps.vcf.gz \
-  --checksums my_checksums.sha256
+  --fasta hg38.fa \
+  --snp-vcf gnomad.vcf.gz \
+  --checksums clinical_checksums.sha256
+
+# 3. Run (checksums verified against registry automatically)
+plexus run --input clinical_junctions.csv --output results/
 ```
 
-**Checksums File Format:**
+#### Path B — Container / Stateless (No Registry)
+
+The recommended path for automated pipelines and Docker. No `~/.plexus/` workspace is needed. `PLEXUS_MODE=compliance` is baked into the container image. Files and checksums are injected at runtime.
+
+```bash
+# Build the image (BLAST 2.17.0 + bcftools 1.23 compiled in)
+docker build -f docker/DOCKERFILE -t plexus:latest .
+
+# Run — no registry, no init
+docker run \
+  -v /data/hg38.fa:/mnt/hg38.fa \
+  -v /data/gnomad.vcf.gz:/mnt/gnomad.vcf.gz \
+  -v /data/checksums.sha256:/mnt/checksums.sha256 \
+  -v /data/junctions.csv:/mnt/junctions.csv \
+  -v /data/output:/mnt/output \
+  plexus:latest \
+  run \
+    --input /mnt/junctions.csv \
+    --fasta /mnt/hg38.fa \
+    --snp-vcf /mnt/gnomad.vcf.gz \
+    --checksums /mnt/checksums.sha256 \
+    --output /mnt/output
 ```
-a1b2c3d4e5f6...  genome.fa
-7g8h9i0j1k2l...  snps.vcf.gz
+
+**Container execution sequence:**
+1. `PLEXUS_MODE=compliance` detected (baked in) → no registry consulted
+2. `--fasta` is explicit → no registry lookup
+3. CLI parses `checksums.sha256`, verifies FASTA + VCF → hashes stored in memory
+4. `run_pipeline()` calls `validate_environment()` → exact tool versions checked against the bundled compliance manifest → `ComplianceError` in <1 s if versions don't match
+5. Pipeline runs
+6. `provenance.json` contains: verified checksums + `compliance_environment` verdict block
+
+### The Compliance Manifest
+
+The file `src/plexus/data/compliance_manifest.json` is bundled immutably inside the package — like a version number, it is part of the software's identity. It declares the exact system tool versions required for compliance-mode operation:
+
+```json
+{
+  "version": "1.0",
+  "description": "Compliance manifest for Plexus. Exact tool versions required for clinical operation.",
+  "tools": {
+    "blastn":          { "exact_version": "2.17.0", "version_regex": "(\\d+\\.\\d+\\.\\d+)" },
+    "makeblastdb":     { "exact_version": "2.17.0", "version_regex": "(\\d+\\.\\d+\\.\\d+)" },
+    "blast_formatter": { "exact_version": "2.17.0", "version_regex": "(\\d+\\.\\d+\\.\\d+)" },
+    "bcftools":        { "exact_version": "1.23",   "version_regex": "(\\d+\\.\\d+)"        }
+  }
+}
 ```
 
-### Clinical Workflow Best Practices
+The manifest version (`"1.0"`) is **independent of the plexus version**. It increments only when the required tool set changes — not with every plexus release.
 
-1. **Resource Verification:**
-   ```bash
-   # Verify all resources before use
-   plexus status
+The Dockerfile's `ARG BLAST_VERSION` / `ARG BCFTOOLS_VERSION` must match the manifest's `exact_version` values. If you re-validate against a different tool version, update both.
 
-   # Check checksums explicitly
-   sha256sum -c my_checksums.sha256
-   ```
+### Environment Validation
 
-2. **Documented Provenance:**
-   - All runs in compliance mode record comprehensive provenance
-   - Provenance includes tool versions, resource checksums, timestamps
-   - Output includes `provenance.json` with full audit trail
+In compliance mode, `run_pipeline()` calls `validate_environment()` before touching any data. It:
 
-3. **Validation Requirements:**
-   - **Mandatory**: SNP checking and BLAST specificity in compliance mode
-   - **Recommended**: Additional wet-lab validation of selected primers
-   - **Documented**: All parameters and configuration settings
+1. Loads the bundled manifest
+2. Runs each required tool with `--version` / `-version`
+3. Extracts the version string using the manifest's regex
+4. Compares to `exact_version`
+5. Raises `ComplianceError` with a consolidated message if anything fails:
 
-4. **Reproducibility:**
-   ```bash
-   # Use exact configuration files
-   plexus run --config validated_config.json ...
+```
+ComplianceError: Environment validation failed — 2 tool(s) do not match the compliance manifest:
+  - blastn: expected exactly 2.17.0, found '2.14.0+'
+  - bcftools: not found on PATH
+```
 
-   # Version control all input files
-   git add junctions.csv validated_config.json my_checksums.sha256
-   ```
+Verdicts per tool: `"pass"` | `"fail"` | `"missing"` | `"unparseable"`
+
+### Compliance Provenance Record
+
+In compliance mode, `provenance.json` includes a `compliance_environment` block:
+
+```json
+{
+  "plexus_version": "0.5.0",
+  "operational_mode": "compliance",
+  "fasta_sha256": "a1b2c3d4...",
+  "snp_vcf_sha256": "e5f6g7h8...",
+  "compliance_environment": {
+    "manifest_version": "1.0",
+    "blastn":          { "expected": "2.17.0", "actual": "2.17.0", "verdict": "pass" },
+    "makeblastdb":     { "expected": "2.17.0", "actual": "2.17.0", "verdict": "pass" },
+    "blast_formatter": { "expected": "2.17.0", "actual": "2.17.0", "verdict": "pass" },
+    "bcftools":        { "expected": "1.23",   "actual": "1.23",   "verdict": "pass" }
+  }
+}
+```
+
+### Generating a Checksums File
+
+```bash
+# Generate from any set of files (sha256sum format)
+sha256sum hg38.fa gnomad.vcf.gz > checksums.sha256
+
+# Verify format
+cat checksums.sha256
+# a1b2c3...  hg38.fa
+# 7g8h9i...  gnomad.vcf.gz
+```
+
+The `--checksums` flag on `plexus run` accepts this file. Plexus matches entries by **filename only** (not path), so the file can live anywhere.
 
 ### Transitioning from Research to Compliance
 
 ```bash
-# 1. Develop and test in research mode
+# 1. Develop and iterate in research mode
 plexus init --genome hg38 --mode research --download
-plexus run --input test_junctions.csv ...
+plexus run --input test_junctions.csv --output test_results/
 
-# 2. Generate checksums for validated resources
-sha256sum ~/.plexus/data/genomes/hg38.fa > clinical_checksums.sha256
-sha256sum ~/.plexus/data/snp/gnomad.vcf.gz >> clinical_checksums.sha256
+# 2. Generate checksums for your validated reference files
+sha256sum hg38.fa gnomad.vcf.gz > clinical_checksums.sha256
 
-# 3. Switch to compliance mode with verified resources
-plexus init --genome hg38 --mode compliance --checksums clinical_checksums.sha256
+# 3a. Local workstation: switch registry to compliance mode
+plexus init --genome hg38 --mode compliance \
+    --fasta hg38.fa --snp-vcf gnomad.vcf.gz \
+    --checksums clinical_checksums.sha256
 
-# 4. Run in compliance mode (checksums enforced)
-plexus run --input clinical_junctions.csv ...
+# 3b. Container: bake PLEXUS_MODE=compliance into image (see docker/DOCKERFILE)
+
+# 4. Run in compliance mode
+plexus run --input clinical_junctions.csv --output clinical_results/
 ```
 
-### Compliance Mode Limitations
+### Compliance Mode Troubleshooting
 
-- **No Checksum Bypass**: Runs will fail if checksums don't match
-- **Strict Validation**: All resources must pass verification
-- **Performance Impact**: Additional verification steps
-- **Resource Management**: More rigorous file handling requirements
+**"--fasta is required in compliance mode"**
+- Compliance mode does not fall back to the registry — always pass `--fasta` explicitly.
 
-### Dependency Version Handling
+**"Environment validation failed — N tool(s) do not match"**
+- Tool versions on PATH do not match the compliance manifest.
+- In Docker: check that the image was built with the correct `ARG BLAST_VERSION` / `ARG BCFTOOLS_VERSION`.
+- On a workstation: install the exact versions listed in `src/plexus/data/compliance_manifest.json`.
 
-**Current Implementation:**
-- **Version Recording**: Tool versions are captured in provenance (BLAST, bcftools, primer3-py)
-- **No Version Enforcement**: Compliance mode does NOT enforce specific dependency versions
-- **Version Tracking**: All versions are recorded in `provenance.json` for audit trails
+**"no entry for hg38.fa in checksums file"** (compliance mode only)
+- The `--checksums` file must contain an entry for the FASTA filename. Check spelling and that the file was generated from the correct path.
 
-**Tool Version Capture:**
-```json
-{
-    "plexus_version": "0.4.6",
-    "primer3_version": "2.6.1",
-    "tool_versions": {
-        "blastn": "2.12.0+",
-        "bcftools": "1.15",
-        "makeblastdb": "2.12.0+"
-    }
-}
-```
-
-**Recommendations for Clinical Use:**
-1. **Document Validated Versions**: Record which tool versions were validated in your workflow
-2. **Version Pinning**: Use containerization (Docker) or conda environments to ensure reproducibility
-3. **Pre-run Validation**: Manually verify tool versions match your validated configuration
-4. **Audit Trail**: Review provenance files to confirm versions used in each run
-
-**Future Considerations:**
-While Plexus currently records but doesn't enforce tool versions, clinical users should:
-- Establish internal version requirements
-- Implement version validation in their workflows
-- Use the provenance data for quality assurance
-- Consider containerization for complete environment control
+**"FASTA checksum mismatch"**
+- The on-disk file does not match the checksums file. Verify the file has not been modified or corrupted.
 
 ### Audit and Documentation Requirements
 
@@ -922,20 +1063,19 @@ For clinical/compliance use, maintain:
 
 1. **Resource Documentation:**
    - Source of all reference files
-   - Version information for genome builds
-   - Date of resource acquisition
-   - Checksum verification records
+   - Genome build version, acquisition date
+   - Checksum verification records (`sha256sum -c checksums.sha256`)
 
 2. **Run Documentation:**
    - Input files (CSV, config, checksums)
    - Exact command line used
-   - Plexus version and dependencies
-   - Output directory with provenance files
+   - Plexus version + compliance manifest version (from `provenance.json`)
+   - Full output directory including `provenance.json`
 
 3. **Validation Records:**
-   - Wet-lab validation results
+   - Wet-lab validation results for selected primers
    - Any manual overrides or exceptions
-   - Final primer sequences used
+   - Final primer sequences ordered
 
 ### Example Clinical Documentation Structure
 
@@ -946,14 +1086,14 @@ project/
 │   ├── validated_config.json
 │   └── clinical_checksums.sha256
 ├── resources/
-│   ├── hg38.fa (with verified checksum)
-│   └── clinical_snps.vcf.gz (with verified checksum)
+│   ├── hg38.fa           (sha256 verified)
+│   └── gnomad.vcf.gz     (sha256 verified)
 ├── outputs/
-│   ├── run_20240115/
+│   ├── run_2026-02-20/
 │   │   ├── selected_multiplex.csv
-│   │   ├── provenance.json
+│   │   ├── provenance.json   ← includes compliance_environment
 │   │   └── ...
-│   └── run_20240122/
+│   └── run_2026-03-01/
 │       └── ...
 └── documentation/
     ├── resource_verification.md

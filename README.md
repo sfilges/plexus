@@ -15,6 +15,7 @@
 - **Multi-Panel Support**: Designs multiple independent panels from a single input CSV using a `Panel` column (e.g., for multiple patients).
 - **Configuration Presets**: Includes `default` and `lenient` configuration presets for different design stringencies.
 - **CLI Interface**: Easy-to-use command line interface for running the design pipeline.
+- **Compliance / Clinical Mode**: Stateless container-ready operation — `PLEXUS_MODE=compliance` env var, bundled tool-version manifest, on-the-fly checksum verification (`--checksums`), and fail-fast environment validation before any data is touched.
 
 ## Limitations
 
@@ -133,11 +134,93 @@ Use `--snp-strict` to discard any primer pair that overlaps a SNP above the AF t
 | `--snp-vcf` | bundled gnomAD | Path to tabix-indexed VCF for SNP checking |
 | `--snp-af-threshold` | `0.01` | Minimum allele frequency for SNP flagging |
 | `--snp-strict` | false | Discard primer pairs overlapping SNPs |
+| `--strict` | false | Verify checksums via registry before running |
+| `--checksums` | — | SHA-256 checksums file for stateless verification (bypasses registry) |
 | `--padding` | `200` | Bases to extract around each junction |
 | `--parallel` | false | Run multiple panels in parallel |
 | `--max-workers` | auto | Max parallel workers (multi-panel mode) |
 
 Run `plexus --help` for a full list of commands and options.
+
+## Compliance Mode and Container Deployment
+
+Plexus has a built-in compliance mode designed for containerized clinical or regulated environments where no persistent `~/.plexus/` workspace exists.
+
+### Operational Mode Priority
+
+| Priority | Source | How to set |
+|----------|--------|------------|
+| 1 (highest) | `PLEXUS_MODE` env var | `export PLEXUS_MODE=compliance` or bake into Docker image |
+| 2 | `~/.plexus/config.json` | `plexus init --mode compliance` |
+| 3 (default) | built-in default | `research` |
+
+### Stateless Container Workflow
+
+```bash
+# Build image with exact tool versions pinned (see docker/DOCKERFILE)
+docker build -f docker/DOCKERFILE -t plexus:latest .
+
+# Run — no ~/.plexus/ needed
+docker run \
+  -v /data/hg38.fa:/mnt/hg38.fa \
+  -v /data/gnomad.vcf.gz:/mnt/gnomad.vcf.gz \
+  -v /data/checksums.sha256:/mnt/checksums.sha256 \
+  -v /data/junctions.csv:/mnt/junctions.csv \
+  -v /data/output:/mnt/output \
+  plexus:latest \
+  run \
+    --input /mnt/junctions.csv \
+    --fasta /mnt/hg38.fa \
+    --snp-vcf /mnt/gnomad.vcf.gz \
+    --checksums /mnt/checksums.sha256 \
+    --output /mnt/output
+```
+
+What happens at runtime:
+1. `PLEXUS_MODE=compliance` (baked into image) — no registry consulted
+2. CLI verifies FASTA + VCF against `checksums.sha256` before the pipeline starts
+3. `run_pipeline()` calls `validate_environment()` — exact tool versions checked against the bundled compliance manifest — fails in <1 s if versions don't match
+4. Pipeline runs; `provenance.json` contains verified checksums and a `compliance_environment` verdict block
+
+### Generating a Checksums File
+
+```bash
+sha256sum hg38.fa gnomad.vcf.gz > checksums.sha256
+```
+
+### What the Compliance Manifest Enforces
+
+The file `src/plexus/data/compliance_manifest.json` (bundled in the package, immutable) declares the exact tool versions required. Its own version is independent of the plexus version and increments only when the required tool set changes.
+
+```json
+{
+  "version": "1.0",
+  "tools": {
+    "blastn":         { "exact_version": "2.17.0", ... },
+    "makeblastdb":    { "exact_version": "2.17.0", ... },
+    "blast_formatter":{ "exact_version": "2.17.0", ... },
+    "bcftools":       { "exact_version": "1.23",   ... }
+  }
+}
+```
+
+### Compliance Provenance Record
+
+In compliance mode, `provenance.json` includes a `compliance_environment` block:
+
+```json
+{
+  "operational_mode": "compliance",
+  "fasta_sha256": "a1b2c3...",
+  "compliance_environment": {
+    "manifest_version": "1.0",
+    "blastn":    { "expected": "2.17.0", "actual": "2.17.0", "verdict": "pass" },
+    "bcftools":  { "expected": "1.23",   "actual": "1.23",   "verdict": "pass" }
+  }
+}
+```
+
+See `docs/USER_GUIDE.md` for the full compliance workflow including local (registry-based) and stateless (container) paths.
 
 ## Configuration
 

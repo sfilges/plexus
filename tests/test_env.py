@@ -117,3 +117,63 @@ def test_check_disk_space():
         # Insufficient space: 1 GB free
         mock_usage.return_value.free = 1 * 1024**3
         assert check_disk_space("/tmp", threshold_gb=2.0) is False
+
+
+class TestComplianceManifest:
+    """Tests for the compliance manifest and environment validation."""
+
+    def test_load_manifest(self):
+        """Manifest can be loaded as a dict."""
+        from plexus.utils.env import load_compliance_manifest
+
+        manifest = load_compliance_manifest()
+        assert isinstance(manifest, dict)
+        assert "tools" in manifest
+        assert "blastn" in manifest["tools"]
+
+    @patch("plexus.utils.env.get_tool_version")
+    def test_validate_environment_pass(self, mock_ver):
+        """Returns passing verdict when versions match exactly."""
+        from plexus.utils.env import validate_environment
+
+        mock_ver.side_effect = lambda name: {
+            "blastn": "blastn: 2.17.0+",
+            "makeblastdb": "makeblastdb: 2.17.0+",
+            "blast_formatter": "blast_formatter: 2.17.0+",
+            "bcftools": "bcftools 1.23",
+        }.get(name)
+
+        verdict = validate_environment(need_blast=True, need_snp=True)
+        assert verdict["blastn"]["verdict"] == "pass"
+        assert verdict["bcftools"]["verdict"] == "pass"
+
+    @patch("plexus.utils.env.get_tool_version")
+    def test_validate_environment_fail(self, mock_ver):
+        """Raises ComplianceError when versions mismatch."""
+        from plexus.utils.env import ComplianceError, validate_environment
+
+        mock_ver.side_effect = lambda name: {
+            "blastn": "blastn: 2.12.0+",  # Mismatch
+            "bcftools": "bcftools 1.23",
+        }.get(name)
+
+        import pytest
+
+        with pytest.raises(ComplianceError) as excinfo:
+            validate_environment(need_blast=True, need_snp=True)
+
+        assert "blastn: expected exactly 2.17.0, found '2.12.0'" in str(excinfo.value)
+
+    @patch("plexus.utils.env.get_tool_version")
+    def test_validate_environment_missing(self, mock_ver):
+        """Raises ComplianceError when tool is missing."""
+        from plexus.utils.env import ComplianceError, validate_environment
+
+        mock_ver.return_value = None
+
+        import pytest
+
+        with pytest.raises(ComplianceError) as excinfo:
+            validate_environment(need_blast=True)
+
+        assert "blastn: not found on PATH" in str(excinfo.value)

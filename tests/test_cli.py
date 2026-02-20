@@ -769,3 +769,77 @@ class TestRunStrictFlag:
         finally:
             Path(csv_path).unlink()
             Path(fasta_path).unlink()
+
+
+class TestStatelessRun:
+    """Tests for the stateless --checksums run path."""
+
+    @patch("plexus.orchestrator.run_multi_panel")
+    @patch("plexus.resources._compute_sha256")
+    @patch("plexus.resources.get_operational_mode", return_value="compliance")
+    def test_run_stateless_success(self, _mock_mode, mock_sha, mock_run_multi):
+        """--checksums allows run to skip registry in compliance mode."""
+        from plexus.pipeline import MultiPanelResult
+
+        # Setup mock hashes
+        mock_sha.side_effect = lambda p: f"hash_of_{p.name}"
+
+        # Setup mock result
+        mock_result = MagicMock(spec=MultiPanelResult)
+        mock_result.success = True
+        mock_result.panel_ids = ["panel1"]
+        mock_result.panel_results = {
+            "panel1": MagicMock(num_junctions=1, selected_pairs=[])
+        }
+        mock_result.output_dir = Path("/tmp")
+        mock_run_multi.return_value = mock_result
+
+        with (
+            tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as csv_f,
+            tempfile.NamedTemporaryFile(suffix=".fa", delete=False) as fa_f,
+            tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as ck_f,
+        ):
+            csv_path = Path(csv_f.name)
+            fa_path = Path(fa_f.name)
+            ck_path = Path(ck_f.name)
+
+            # Write a valid sha256sum file
+            ck_path.write_text(f"hash_of_{fa_path.name}  {fa_path.name}\n")
+
+            try:
+                result = runner.invoke(
+                    app,
+                    [
+                        "run",
+                        "-i",
+                        str(csv_path),
+                        "-f",
+                        str(fa_path),
+                        "--checksums",
+                        str(ck_path),
+                    ],
+                )
+
+                assert result.exit_code == 0
+                assert "FASTA verified" in result.output
+
+                # Verify orchestrator was called with the computed hash
+                call_kwargs = mock_run_multi.call_args[1]
+                assert call_kwargs["fasta_sha256"] == f"hash_of_{fa_path.name}"
+            finally:
+                csv_path.unlink()
+                fa_path.unlink()
+                ck_path.unlink()
+
+    @patch("plexus.resources.get_operational_mode", return_value="compliance")
+    def test_run_compliance_requires_fasta(self, _mock_mode):
+        """In compliance mode, run must have --fasta explicitly (stateless)."""
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as csv_f:
+            try:
+                result = runner.invoke(app, ["run", "-i", csv_f.name])
+                assert result.exit_code == 1
+                assert "--fasta is required in compliance mode" in strip_ansi(
+                    result.output
+                )
+            finally:
+                Path(csv_f.name).unlink()

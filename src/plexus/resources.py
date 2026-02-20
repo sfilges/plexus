@@ -254,7 +254,16 @@ def _save_global_config(cfg: dict) -> None:
 
 
 def get_operational_mode() -> str:
-    """Return the operational mode: ``'research'`` or ``'compliance'``."""
+    """Return the operational mode: ``'research'`` or ``'compliance'``.
+
+    Priority:
+      1. PLEXUS_MODE environment variable (authority for containers)
+      2. ~/.plexus/config.json (workspace convenience)
+      3. Default: 'research'
+    """
+    env_mode = os.environ.get("PLEXUS_MODE")
+    if env_mode in ("research", "compliance"):
+        return env_mode
     return _load_global_config().get("mode", "research")
 
 

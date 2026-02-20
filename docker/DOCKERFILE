@@ -1,9 +1,19 @@
+ARG BLAST_VERSION=2.17.0
+ARG BCFTOOLS_VERSION=1.23
+ARG PLEXUS_VERSION=0.5.0
+
+# ── Stage 1: Python venv builder ─────────────────────────────────────────────
 FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS builder
 
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 
 WORKDIR /app
+
+# Install build dependencies for C extensions (like primer3-py)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -18,20 +28,73 @@ ADD . /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable
 
-FROM python:3.13-slim-bookworm
+# ── Stage 2: Exact-version tool binaries ─────────────────────────────────────
+FROM debian:bookworm-slim AS tools
 
-# Install system dependencies (BLAST+ and bcftools)
+ARG BLAST_VERSION
+ARG BCFTOOLS_VERSION
+
+# Build dependencies for bcftools
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ncbi-blast+ \
-    bcftools \
+    wget ca-certificates \
+    bzip2 \
+    gcc make libbz2-dev liblzma-dev zlib1g-dev libcurl4-openssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Note: plexus is optimized for small to medium-sized panels (<100 targets).
-# Copy the environment from the builder stage
-COPY --from=builder --chown=root:root /app/.venv /app/.venv
+# Download and extract exact BLAST+ binaries (NCBI prebuilt)
+RUN wget -qO /tmp/blast.tar.gz \
+      "https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/${BLAST_VERSION}/ncbi-blast-${BLAST_VERSION}+-x64-linux.tar.gz" \
+    && tar -xzf /tmp/blast.tar.gz -C /tmp \
+    && mkdir -p /tools/bin \
+    && cp /tmp/ncbi-blast-${BLAST_VERSION}+/bin/blastn \
+          /tmp/ncbi-blast-${BLAST_VERSION}+/bin/makeblastdb \
+          /tmp/ncbi-blast-${BLAST_VERSION}+/bin/blast_formatter \
+          /tools/bin/ \
+    && rm -rf /tmp/blast.tar.gz /tmp/ncbi-blast-${BLAST_VERSION}+
 
-# Add the virtual environment to the PATH
+# Compile exact bcftools from source
+RUN wget -qO /tmp/bcftools.tar.bz2 \
+      "https://github.com/samtools/bcftools/releases/download/${BCFTOOLS_VERSION}/bcftools-${BCFTOOLS_VERSION}.tar.bz2" \
+    && tar -xjf /tmp/bcftools.tar.bz2 -C /tmp \
+    && cd /tmp/bcftools-${BCFTOOLS_VERSION} \
+    && make -j$(nproc) \
+    && cp bcftools /tools/bin/ \
+    && rm -rf /tmp/bcftools*
+
+# ── Stage 3: Runtime image ───────────────────────────────────────────────────
+FROM python:3.13-slim-bookworm
+
+ARG BLAST_VERSION
+ARG BCFTOOLS_VERSION
+ARG PLEXUS_VERSION
+
+# Bake version and audit metadata into the image
+LABEL org.opencontainers.image.title="plexus" \
+      org.opencontainers.image.version="${PLEXUS_VERSION}" \
+      org.opencontainers.image.description="Multiplex PCR primer panel designer" \
+      org.opencontainers.image.licenses="GPL-2.0-or-later" \
+      dev.plexus.blast_version="${BLAST_VERSION}" \
+      dev.plexus.bcftools_version="${BCFTOOLS_VERSION}" \
+      dev.plexus.compliance_mode="true"
+
+# Non-root runtime user
+RUN useradd --system --create-home --shell /bin/bash plexus
+
+# Copy exact-version tool binaries from tools stage
+COPY --from=tools /tools/bin/blastn          /usr/local/bin/blastn
+COPY --from=tools /tools/bin/makeblastdb     /usr/local/bin/makeblastdb
+COPY --from=tools /tools/bin/blast_formatter /usr/local/bin/blast_formatter
+COPY --from=tools /tools/bin/bcftools        /usr/local/bin/bcftools
+
+# Copy plexus venv from builder
+COPY --from=builder --chown=plexus:plexus /app/.venv /app/.venv
+
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Default command
-CMD ["plexus"]
+# Compliance mode is the default for this container image
+ENV PLEXUS_MODE=compliance
+
+USER plexus
+WORKDIR /home/plexus
+
+ENTRYPOINT ["plexus"]

@@ -1,0 +1,22 @@
+{
+  "version": "1.0",
+  "description": "Compliance manifest for Plexus. Exact tool versions required for clinical operation.",
+  "tools": {
+    "blastn": {
+      "exact_version": "2.17.0",
+      "version_regex": "(\\d+\\.\\d+\\.\\d+)"
+    },
+    "makeblastdb": {
+      "exact_version": "2.17.0",
+      "version_regex": "(\\d+\\.\\d+\\.\\d+)"
+    },
+    "blast_formatter": {
+      "exact_version": "2.17.0",
+      "version_regex": "(\\d+\\.\\d+\\.\\d+)"
+    },
+    "bcftools": {
+      "exact_version": "1.23",
+      "version_regex": "(\\d+\\.\\d+)"
+    }
+  }
+}

@@ -5,6 +5,30 @@ All notable changes to plexus will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 20-02-2026
+
+### Added
+
+- **Stateless compliance mode for containers** (`PLEXUS_MODE` env var): `get_operational_mode()` now checks the `PLEXUS_MODE` environment variable before `~/.plexus/config.json`. Containers bake `ENV PLEXUS_MODE=compliance` into the image — no workspace required. The env var takes absolute precedence, making it the authority for automated deployment.
+- **Compliance manifest** (`src/plexus/data/compliance_manifest.json`): An immutable, package-bundled JSON file declaring the exact tool versions required for compliance-mode operation (BLAST+ `2.17.0`, bcftools `1.23`). The manifest is part of the software's identity and ships with every release. Its own version (`"1.0"`) is independent of the plexus version — it increments only when required tool versions change.
+- **`validate_environment(need_blast, need_snp)`** (`plexus.utils.env`): Checks each required tool against the manifest using the tool's own version output and a per-tool regex. Returns a structured verdict dict for provenance. Raises `ComplianceError` with a consolidated error message listing every mismatch. Verdict values: `"pass"` | `"fail"` | `"missing"` | `"unparseable"`.
+- **`ComplianceError`** (`plexus.utils.env`): Named exception (`RuntimeError` subclass) raised by `validate_environment()` — lets callers distinguish compliance failures from other runtime errors.
+- **`load_compliance_manifest()`** (`plexus.utils.env`): Loads the bundled manifest via `importlib.resources` — works in installed packages without relying on file system paths.
+- **Compliance environment guard in `run_pipeline()`**: Immediately after path validation and before any file I/O, the pipeline calls `validate_environment()` in compliance mode. Wrong tool version = `ComplianceError` in under one second, before any data is touched.
+- **`--checksums` flag on `plexus run`**: Enables stateless verification — parse a `sha256sum`-format file and verify the FASTA and SNP VCF on-the-fly, without consulting the registry. In compliance mode, the FASTA entry must be present in the checksums file. Verified hashes are stored and threaded into provenance.
+- **`fasta_sha256` / `snp_vcf_sha256` params on `run_pipeline()`**: Pre-verified hashes from the CLI bypass the registry lookup in `_collect_provenance()`. Registry lookup is now a fallback only.
+- **`compliance_environment` block in `provenance.json`**: When a run executes in compliance mode, `provenance.json` gains a `compliance_environment` key containing the manifest version and per-tool verdicts (`expected`, `actual`, `verdict`).
+- **Compliance mode requires explicit `--fasta`** on `plexus run`: In compliance mode, omitting `--fasta` is a hard error — the registry is not consulted. Research-mode fallback to the registry is unchanged.
+- **Hardened Dockerfile** (`docker/DOCKERFILE`): Multi-stage build now pins exact tool versions:
+  - `ARG BLAST_VERSION=2.17.0` / `ARG BCFTOOLS_VERSION=1.23` — single source of truth at the top.
+  - New `tools` build stage downloads the NCBI prebuilt BLAST+ tarball at the exact version and compiles bcftools from its release tag — no `apt-get` version drift.
+  - Runtime stage: non-root `plexus` user, OCI `LABEL` metadata (tool versions, compliance flag), `ENV PLEXUS_MODE=compliance` baked in, `ENTRYPOINT ["plexus"]` (not `CMD`).
+
+### Changed
+
+- **`_collect_provenance()` signature** (`pipeline.py`): Accepts `fasta_sha256`, `snp_vcf_sha256`, and `compliance_report` kwargs. Registry lookup is now a fallback rather than the primary path.
+- **Operational mode priority**: ENV var → config file → default. Previously only the config file was consulted.
+
 ## [0.4.6] - 20-02-2026
 
 ### Added

@@ -117,6 +117,9 @@ def _collect_provenance(
     genome: str,
     run_blast: bool,
     skip_snpcheck: bool,
+    fasta_sha256: str | None = None,
+    snp_vcf_sha256: str | None = None,
+    compliance_report: dict | None = None,
 ) -> dict:
     """Collect tool versions, resource paths, and checksums for provenance."""
     import datetime
@@ -125,21 +128,24 @@ def _collect_provenance(
 
     tool_versions = get_tool_versions(["blastn", "bcftools", "makeblastdb"])
 
-    # Look up stored checksums from registry (avoid re-hashing large files)
-    fasta_sha256 = None
-    snp_vcf_sha256 = None
-    try:
-        registry = _load_registry()
-        for entry in registry.values():
-            if entry.get("fasta") == str(fasta_file):
-                fasta_sha256 = entry.get("fasta_sha256")
-            vcf_str = str(snp_vcf) if snp_vcf else None
-            if vcf_str and entry.get("snp_vcf") == vcf_str:
-                snp_vcf_sha256 = entry.get("snp_vcf_sha256")
-    except Exception:
-        pass
+    # Fall back to registry lookup only when caller did not supply hashes
+    if fasta_sha256 is None or snp_vcf_sha256 is None:
+        try:
+            registry = _load_registry()
+            for entry in registry.values():
+                if fasta_sha256 is None and entry.get("fasta") == str(fasta_file):
+                    fasta_sha256 = entry.get("fasta_sha256")
+                vcf_str = str(snp_vcf) if snp_vcf else None
+                if (
+                    snp_vcf_sha256 is None
+                    and vcf_str
+                    and entry.get("snp_vcf") == vcf_str
+                ):
+                    snp_vcf_sha256 = entry.get("snp_vcf_sha256")
+        except Exception:
+            pass
 
-    return {
+    record: dict = {
         "plexus_version": get_plexus_version(),
         "primer3_version": get_primer3_version(),
         "tool_versions": tool_versions,
@@ -153,6 +159,11 @@ def _collect_provenance(
         "run_blast": run_blast,
         "skip_snpcheck": skip_snpcheck,
     }
+
+    if compliance_report is not None:
+        record["compliance_environment"] = compliance_report
+
+    return record
 
 
 def run_pipeline(
@@ -172,6 +183,8 @@ def run_pipeline(
     snp_strict: bool = False,
     selector: str = "Greedy",
     debug: bool = False,
+    fasta_sha256: str | None = None,
+    snp_vcf_sha256: str | None = None,
 ) -> PipelineResult:
     """
     Run the complete multiplex primer design pipeline.
@@ -225,6 +238,22 @@ def run_pipeline(
     if not fasta_file.exists():
         raise FileNotFoundError(f"FASTA file not found: {fasta_file}")
 
+    # --- Compliance environment guard ---
+    from plexus.resources import get_operational_mode
+    from plexus.utils.env import ComplianceError, validate_environment
+
+    op_mode = get_operational_mode()
+    compliance_report: dict | None = None
+    if op_mode == "compliance":
+        try:
+            compliance_report = validate_environment(
+                need_blast=run_blast,
+                need_snp=not skip_snpcheck,
+            )
+        except ComplianceError as e:
+            logger.error(f"Compliance environment check failed: {e}")
+            raise
+
     # --- Pre-flight dependency check ---
     missing = get_missing_tools(need_blast=run_blast, need_snp=not skip_snpcheck)
     if missing:
@@ -249,6 +278,9 @@ def run_pipeline(
         genome=genome,
         run_blast=run_blast,
         skip_snpcheck=skip_snpcheck,
+        fasta_sha256=fasta_sha256,
+        snp_vcf_sha256=snp_vcf_sha256,
+        compliance_report=compliance_report,
     )
     import json as _json
 

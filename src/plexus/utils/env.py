@@ -90,6 +90,104 @@ def get_primer3_version() -> str | None:
         return None
 
 
+class ComplianceError(RuntimeError):
+    """Raised when the environment does not meet compliance manifest requirements."""
+
+
+def load_compliance_manifest() -> dict:
+    """Load the bundled compliance manifest JSON."""
+    import json
+    from importlib import resources
+
+    text = (
+        resources.files("plexus.data")
+        .joinpath("compliance_manifest.json")
+        .read_text(encoding="utf-8")
+    )
+    return json.loads(text)
+
+
+def validate_environment(need_blast: bool = False, need_snp: bool = False) -> dict:
+    """Check tool versions against the compliance manifest.
+
+    Returns a structured verdict dict (for provenance). Raises
+    ``ComplianceError`` if any required tool is missing or the wrong version.
+
+    Verdict values per tool: ``"pass"`` | ``"fail"`` | ``"missing"`` | ``"unparseable"``
+    """
+    import re
+
+    manifest = load_compliance_manifest()
+    tools_spec = manifest["tools"]
+
+    tools_to_check: list[str] = []
+    if need_blast:
+        tools_to_check.extend(["blastn", "makeblastdb", "blast_formatter"])
+    if need_snp:
+        tools_to_check.append("bcftools")
+
+    verdicts: dict[str, dict] = {}
+    failures: list[str] = []
+
+    for tool_name in tools_to_check:
+        if tool_name not in tools_spec:
+            continue
+        spec = tools_spec[tool_name]
+        expected = spec["exact_version"]
+        pattern = spec["version_regex"]
+
+        version_str = get_tool_version(tool_name)
+
+        if version_str is None:
+            verdicts[tool_name] = {
+                "expected": expected,
+                "actual": None,
+                "verdict": "missing",
+            }
+            failures.append(f"  - {tool_name}: not found on PATH")
+        else:
+            match = re.search(pattern, version_str)
+            if not match:
+                verdicts[tool_name] = {
+                    "expected": expected,
+                    "actual": version_str,
+                    "verdict": "unparseable",
+                }
+                failures.append(
+                    f"  - {tool_name}: could not parse version from {version_str!r}"
+                )
+            else:
+                actual = match.group(1)
+                if actual == expected:
+                    verdicts[tool_name] = {
+                        "expected": expected,
+                        "actual": actual,
+                        "verdict": "pass",
+                    }
+                else:
+                    verdicts[tool_name] = {
+                        "expected": expected,
+                        "actual": actual,
+                        "verdict": "fail",
+                    }
+                    failures.append(
+                        f"  - {tool_name}: expected exactly {expected}, found {actual!r}"
+                    )
+
+    if failures:
+        n = len(failures)
+        msg = (
+            f"Environment validation failed — {n} tool(s) do not match the compliance manifest:\n"
+            + "\n".join(failures)
+        )
+        raise ComplianceError(msg)
+
+    return {
+        "manifest_version": manifest.get("version", "unknown"),
+        **verdicts,
+    }
+
+
 def check_disk_space(path: str | Path, threshold_gb: float = 2.0) -> bool:
     """Verify that the target directory has sufficient free disk space.
 
