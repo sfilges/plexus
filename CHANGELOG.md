@@ -1,3 +1,29 @@
+## [0.5.3] - 20-02-2026
+
+### Changed
+
+- **ARCH-05 · Allow registry use in compliance mode**: Compliance mode no longer blocks registry
+  lookups when `--fasta` is omitted. Both research and compliance modes now fall through to
+  `get_registered_fasta()`. In compliance mode, the existing `should_verify` flag automatically
+  enforces checksum verification against the stored registry — no compliance benefit was gained
+  by requiring `--fasta` on every invocation, since the registry already stores and verifies
+  SHA-256 checksums. Container deployments are unaffected: without a mounted `~/.plexus/`
+  volume, the registry is empty and the existing "genome not initialized" error fires.
+- **`plexus status` compliance note**: In compliance mode, `plexus status` now shows a
+  clarifying line below the mode indicator: *"Registry lookups enforce checksum verification
+  in compliance mode."*
+- **Improved warning for missing registry checksums**: The warning `"compliance mode active
+  but no checksums stored"` now names the genome and directs users to re-run `plexus init
+  --checksums` rather than suggesting the stateless `--checksums` path as the only option.
+
+### Updated
+
+- **`docs/COMPLIANCE_GUIDE.md`**: Section 2 updated to describe both the stateless (containers/CI)
+  and registry (clinical workstations) resource supply modes. The "No Hidden State" compliance
+  rationale updated to reflect that registry-based runs are equally auditable. The troubleshooting
+  entry for the now-removed `"--fasta is required in compliance mode"` error replaced with
+  guidance for the `"no checksums stored"` warning.
+
 ## [0.5.2] - 20-02-2026
 
 ### Added
@@ -22,7 +48,7 @@
 - **`--checksums` flag on `plexus run`**: Enables stateless verification — parse a `sha256sum`-format file and verify the FASTA and SNP VCF on-the-fly, without consulting the registry. In compliance mode, the FASTA entry must be present in the checksums file. Verified hashes are stored and threaded into provenance.
 - **`fasta_sha256` / `snp_vcf_sha256` params on `run_pipeline()`**: Pre-verified hashes from the CLI bypass the registry lookup in `_collect_provenance()`. Registry lookup is now a fallback only.
 - **`compliance_environment` block in `provenance.json`**: When a run executes in compliance mode, `provenance.json` gains a `compliance_environment` key containing the manifest version and per-tool verdicts (`expected`, `actual`, `verdict`).
-- **Compliance mode requires explicit `--fasta`** on `plexus run`: In compliance mode, omitting `--fasta` is a hard error — the registry is not consulted. Research-mode fallback to the registry is unchanged.
+- **Compliance mode required explicit `--fasta`** on `plexus run`: In compliance mode, omitting `--fasta` was a hard error — the registry was not consulted. *(Superseded by ARCH-05 in v0.5.3, which allows registry use in compliance mode with automatic checksum enforcement.)*
 - **Hardened Dockerfile** (`docker/DOCKERFILE`): Multi-stage build now pins exact tool versions:
   - `ARG BLAST_VERSION=2.17.0` / `ARG BCFTOOLS_VERSION=1.23` — single source of truth at the top.
   - New `tools` build stage downloads the NCBI prebuilt BLAST+ tarball at the exact version and compiles bcftools from its release tag — no `apt-get` version drift.

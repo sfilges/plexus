@@ -459,7 +459,7 @@ local file registration path.
 
 ---
 
-### ARCH-05 · Allow registry use in compliance mode
+### ~~ARCH-05 · Allow registry use in compliance mode~~ ✅ Fixed in v0.5.3
 
 **Severity: Important · Files: `src/plexus/cli.py`, `src/plexus/resources.py`**
 
@@ -678,6 +678,17 @@ cross-reactivity matrix, facilitating rapid review by clinical lab staff.
 
 ---
 
+### AUDT-04 · Improve status command
+
+**Severity: Low**
+
+plexus status currently shows whether system dependencies are installed, but not
+the installed version. It also does not indicate whether these versions match
+the compliance_manifest.json. In mode=compliance, this mismatch should be
+indicated, in mode=research just showing the versions should be enough.
+
+---
+
 ## v2.x - Future releases
 
 ### SPLIT-01 · Automated Panel Splitting
@@ -727,5 +738,5 @@ project.
 | AUDT-03 | Record run success/failure status in `provenance.json` | v1.0 | Important | |
 | SCI-01 | Weight SNP penalties by allele frequency | v1.0 | Important | |
 | ~~ARCH-04~~ | ~~Remove genome download functionality~~ | ~~v1.0~~ | ~~Important~~ | ✅ v0.5.1 |
-| ARCH-05 | Allow registry use in compliance mode | v1.0 | Important | |
+| ~~ARCH-05~~ | ~~Allow registry use in compliance mode~~ | ~~v1.0~~ | ~~Important~~ | ✅ v0.5.3 |
 | TEST-01 | End-to-end integration test with real BLAST | v1.1 | Important | |

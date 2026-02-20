@@ -1,8 +1,8 @@
 # ================================================================================
 # Multiplexpanel classes and associated functions
 #
-# Author: Stefan Filges (stefan@simsendiagnostics.com)
-# Copyright (c) 2025 Simsen Diagnostics AB
+# Author: Stefan Filges (stefan.filges@pm.me)
+# Copyright (c) 2025 Stefan Filges
 # ================================================================================
 
 import json

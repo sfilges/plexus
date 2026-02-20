@@ -221,13 +221,9 @@ def run(
     op_mode = get_operational_mode()
 
     if fasta_file is None:
-        if op_mode == "compliance":
-            console.print(
-                "[bold red]Error: --fasta is required in compliance mode. "
-                "Compliance mode does not use the registry.[/bold red]"
-            )
-            raise typer.Exit(code=1)
-        # Research mode: fall back to registry (existing behaviour)
+        # Fall back to registry for both research and compliance modes.
+        # In compliance mode the checksum verification below (should_verify) is
+        # automatically enabled, so this path is equally auditable.
         fasta_file = get_registered_fasta(genome)
         if fasta_file is None:
             typer.echo(
@@ -306,8 +302,8 @@ def run(
                 raise typer.Exit(code=1)
             if check.get("fasta") is None and op_mode == "compliance":
                 console.print(
-                    "[yellow]Warning: compliance mode active but no checksums stored. "
-                    "Provide --checksums for stateless verification.[/yellow]"
+                    f"[yellow]Warning: compliance mode active but no checksums stored for "
+                    f"'{genome}'. Re-run `plexus init` with `--checksums` to register them.[/yellow]"
                 )
 
     console.print("[bold green]Plexus[/bold green]")
@@ -396,6 +392,10 @@ def status() -> None:
 
     console.print(f"[bold green]Plexus[/bold green] version {__version__}")
     console.print(f"  Mode: [bold]{op_mode}[/bold]")
+    if op_mode == "compliance":
+        console.print(
+            "  [dim]Registry lookups enforce checksum verification in compliance mode.[/dim]"
+        )
     console.print()
 
     # Tool status

@@ -514,6 +514,69 @@ class TestRunRegistryFallback:
         finally:
             Path(csv_path).unlink()
 
+    @patch("plexus.orchestrator.run_pipeline")
+    @patch("plexus.resources.verify_resource_checksums")
+    @patch("plexus.resources.get_registered_fasta")
+    @patch("plexus.resources.get_operational_mode", return_value="compliance")
+    def test_run_compliance_uses_registry_with_checksum_pass(
+        self, _mock_mode, mock_get_fasta, mock_verify, mock_pipeline
+    ):
+        """Compliance mode falls back to registry and auto-verifies checksums (pass)."""
+        with tempfile.NamedTemporaryFile(suffix=".fa", delete=False) as fa_f:
+            fasta_path = Path(fa_f.name)
+            fa_f.write(b">chr1\nACGT\n")
+
+        mock_get_fasta.return_value = fasta_path
+        mock_verify.return_value = {"fasta": True, "snp_vcf": None}
+
+        mock_panel = MagicMock()
+        mock_panel.junctions = []
+        mock_pipeline.return_value = PipelineResult(
+            panel=mock_panel,
+            output_dir=Path("/tmp/output"),
+            config=MagicMock(),
+            steps_completed=[],
+            errors=[],
+        )
+
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as csv_f:
+            csv_path = csv_f.name
+            csv_f.write(b"Name,Chrom,Position\n")
+
+        try:
+            result = runner.invoke(app, ["run", "--input", csv_path])
+            assert result.exit_code == 0
+            mock_verify.assert_called_once_with("hg38")
+        finally:
+            fasta_path.unlink()
+            Path(csv_path).unlink()
+
+    @patch("plexus.resources.verify_resource_checksums")
+    @patch("plexus.resources.get_registered_fasta")
+    @patch("plexus.resources.get_operational_mode", return_value="compliance")
+    def test_run_compliance_registry_checksum_mismatch_exits(
+        self, _mock_mode, mock_get_fasta, mock_verify
+    ):
+        """Compliance mode fails with checksum mismatch on registry FASTA."""
+        with tempfile.NamedTemporaryFile(suffix=".fa", delete=False) as fa_f:
+            fasta_path = Path(fa_f.name)
+            fa_f.write(b">chr1\nACGT\n")
+
+        mock_get_fasta.return_value = fasta_path
+        mock_verify.return_value = {"fasta": False, "snp_vcf": None}
+
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as csv_f:
+            csv_path = csv_f.name
+            csv_f.write(b"Name,Chrom,Position\n")
+
+        try:
+            result = runner.invoke(app, ["run", "--input", csv_path])
+            assert result.exit_code == 1
+            assert "checksum mismatch" in strip_ansi(result.output).lower()
+        finally:
+            fasta_path.unlink()
+            Path(csv_path).unlink()
+
 
 class TestCLIShortFlags:
     """Tests for short flag aliases."""
@@ -813,15 +876,15 @@ class TestStatelessRun:
                 fa_path.unlink()
                 ck_path.unlink()
 
+    @patch("plexus.resources.get_registered_fasta", return_value=None)
     @patch("plexus.resources.get_operational_mode", return_value="compliance")
-    def test_run_compliance_requires_fasta(self, _mock_mode):
-        """In compliance mode, run must have --fasta explicitly (stateless)."""
+    def test_run_compliance_no_fasta_no_registry_exits(self, _mock_mode, _mock_fasta):
+        """In compliance mode with no --fasta and an empty registry, run exits with error."""
         with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as csv_f:
             try:
                 result = runner.invoke(app, ["run", "-i", csv_f.name])
                 assert result.exit_code == 1
-                assert "--fasta is required in compliance mode" in strip_ansi(
-                    result.output
-                )
+                combined = strip_ansi(result.output)
+                assert "not initialized" in combined or "plexus init" in combined
             finally:
                 Path(csv_f.name).unlink()

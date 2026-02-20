@@ -1,6 +1,6 @@
 # Plexus Compliance & Clinical Workflow Guide
 
-This guide describes the **Stateless & Verified** workflow for using Plexus in clinical, diagnostic, or regulated environments. This approach ensures total reproducibility by locking tool versions in a container and enforcing data integrity via mandatory checksums.
+This guide describes how to use Plexus in clinical, diagnostic, or regulated environments. It covers both the **Stateless** workflow (containers/CI) and the **Registry** workflow (clinical workstations). Both approaches enforce data integrity via SHA-256 checksum verification and ensure total reproducibility by locking tool versions in a container.
 
 ## 1. Environment Setup
 
@@ -29,7 +29,11 @@ docker build -t plexus:0.5.0-strict -f docker/DOCKERFILE .
 
 ## 2. Input & Resource Preparation
 
-In compliance mode, Plexus is **stateless**. It does not rely on a local registry (`registry.json`). Instead, it verifies every file on-the-fly against a provided checksums file.
+In compliance mode, Plexus enforces checksum verification on every run. You can supply resources in two ways:
+
+**Option A — Stateless (containers/CI, described in this guide):** Provide `--fasta`, `--snp-vcf`, and `--checksums` on every invocation. Plexus verifies files on-the-fly without any local state.
+
+**Option B — Registry (clinical workstations):** Register your FASTA and VCF once with `plexus init`. On subsequent `plexus run` calls, Plexus automatically verifies their SHA-256 checksums against the stored registry — no `--fasta` flag is required on every invocation.
 
 ### Organize your Data
 
@@ -131,7 +135,7 @@ docker run --rm \
 
 1. **Environment Authority**: The container is "born" with `PLEXUS_MODE=compliance`. It will refuse to run if the internal `blastn` or `bcftools` versions don't match the hardcoded manifest.
 2. **Data Integrity**: Plexus hashes `/data/hg38.fa` at runtime and compares it to `/data/clinical_resources.sha256`. If a single byte has changed, the pipeline halts.
-3. **No Hidden State**: Because it is stateless, there is no "remembered" data in `~/.plexus`. Every run is a fresh, verified start.
+3. **No Hidden State** *(stateless path)*: When using `--checksums`, there is no "remembered" data in `~/.plexus`. Every run is a fresh, verified start. When using the registry on a workstation, SHA-256 checksums are verified against the values stored at registration time — equally auditable, with the convenience of omitting `--fasta` on every invocation.
 
 ---
 
@@ -172,6 +176,13 @@ This occurs if the Docker image was built with a different version of BLAST than
 
 The genome file on disk does not match the hash in your `.sha256` file. Ensure that the genome was not compressed, decompressed, or edited after the hash was generated.
 
-### "--fasta is required in compliance mode"
+### "compliance mode active but no checksums stored for 'hg38'"
 
-Stateless mode disables the automatic lookup of "registered" genomes. You must always provide the explicit path to the FASTA file using `--fasta`.
+Your genome is registered in the local registry but was initialized without a checksums file.
+Re-run `plexus init` with the `--checksums` flag to register the file hashes:
+
+```bash
+sha256sum hg38.fa gnomad.vcf.gz > clinical_resources.sha256
+plexus init --genome hg38 --fasta hg38.fa --snp-vcf gnomad.vcf.gz \
+            --checksums clinical_resources.sha256
+```

@@ -1,8 +1,8 @@
 # ================================================================================
 # Oligonucleotide thermodynamic alignment calculations.
 #
-# Author: Stefan Filges (stefan@simsendiagnostics.com)
-# Copyright (c) 2025-2026 Simsen Diagnostics AB
+# Author: Stefan Filges (stefan.filges@pm.me)
+# Copyright (c) 2025 Stefan Filges
 #
 # Based on the oligotm.c library from Primer3.
 # Copyright (c) 1996-2007 Whitehead Institute for Biomedical Research
