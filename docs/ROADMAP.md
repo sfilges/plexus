@@ -678,6 +678,8 @@ cross-reactivity matrix, facilitating rapid review by clinical lab staff.
 
 ---
 
+## v2.x - Future releases
+
 ### SPLIT-01 · Automated Panel Splitting
 
 **Severity: Future**
