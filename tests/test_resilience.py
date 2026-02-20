@@ -6,10 +6,9 @@ import pytest
 
 from plexus.designer.multiplexpanel import MultiplexPanel
 from plexus.snpcheck.snp_data import (
-    _get_vcf_contigs,
     _write_regions_bed,
 )
-from plexus.utils.utils import run_command
+from plexus.utils.utils import get_vcf_contigs, run_command
 
 
 def test_run_command_success():
@@ -82,7 +81,7 @@ def test_get_vcf_contigs_mock():
         "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n"
     )
 
-    with patch("plexus.snpcheck.snp_data.run_command", return_value=mock_result):
-        with patch("plexus.snpcheck.snp_data._check_bcftools", return_value="bcftools"):
-            contigs = _get_vcf_contigs(Path("fake.vcf.gz"))
+    with patch("plexus.utils.utils.run_command", return_value=mock_result):
+        with patch("shutil.which", return_value="bcftools"):
+            contigs = get_vcf_contigs(Path("fake.vcf.gz"))
             assert contigs == {"chr1", "chr2", "chr3"}

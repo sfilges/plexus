@@ -524,5 +524,57 @@ def init(
         console.print(f"           sha256:{s['snp_vcf_sha256'][:16]}…")
 
 
+@app.command()
+def template(
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Directory to write template files.",
+        ),
+    ] = Path("."),
+) -> None:
+    """Generate starter files (junctions.csv, designer_config.json) for a new design.
+
+    This command creates template files in the specified directory to help you
+    get started with a new multiplex primer design.
+    """
+    from plexus.config import DesignerConfig
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. junctions.csv
+    csv_path = output_dir / "junctions.csv"
+    if csv_path.exists():
+        console.print(f"[yellow]Warning: {csv_path} already exists, skipping.[/yellow]")
+    else:
+        with csv_path.open("w") as f:
+            f.write("Name,Chrom,Five_Prime_Coordinate,Three_Prime_Coordinate,Panel\n")
+            f.write("BRAF_V600E,chr7,140753336,140753336,panel1\n")
+            f.write("EGFR_L858R,chr7,55191822,55191822,panel1\n")
+        console.print(f"  [green]✓[/green] Created {csv_path}")
+
+    # 2. designer_config.json
+    json_path = output_dir / "designer_config.json"
+    if json_path.exists():
+        console.print(
+            f"[yellow]Warning: {json_path} already exists, skipping.[/yellow]"
+        )
+    else:
+        config = DesignerConfig()
+        config.to_json_file(json_path)
+        console.print(f"  [green]✓[/green] Created {json_path}")
+
+    console.print("\n[bold green]Templates ready![/bold green]")
+    console.print(f"1. Edit [bold]{csv_path.name}[/bold] with your target coordinates.")
+    console.print(
+        f"2. (Optional) Edit [bold]{json_path.name}[/bold] to tune design parameters."
+    )
+    console.print(
+        f"3. Run: plexus run -i {csv_path.name} -c {json_path.name} -f /path/to/genome.fa"
+    )
+
+
 if __name__ == "__main__":
     app()

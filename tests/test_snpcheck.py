@@ -444,6 +444,80 @@ class TestWriteRegionsBed:
         assert len(lines) == 2
 
 
+class TestChromNamingValidation:
+    """Tests for detect_chrom_naming_mismatch."""
+
+    def test_panel_chr_vcf_no_chr_detected(self):
+        """chr1 panel vs 1 VCF → warning returned."""
+        from plexus.utils.utils import detect_chrom_naming_mismatch
+
+        msg = detect_chrom_naming_mismatch({"chr1", "chr7"}, {"1", "7", "X"})
+        assert msg is not None
+        assert "chr" in msg
+
+    def test_panel_no_chr_vcf_chr_detected(self):
+        """1 panel vs chr1 VCF → warning returned."""
+        from plexus.utils.utils import detect_chrom_naming_mismatch
+
+        msg = detect_chrom_naming_mismatch({"1", "7"}, {"chr1", "chr7", "chrX"})
+        assert msg is not None
+        assert "chr" in msg
+
+    def test_both_have_chr_no_mismatch(self):
+        from plexus.utils.utils import detect_chrom_naming_mismatch
+
+        assert detect_chrom_naming_mismatch({"chr1"}, {"chr1", "chr2"}) is None
+
+    def test_both_lack_chr_no_mismatch(self):
+        from plexus.utils.utils import detect_chrom_naming_mismatch
+
+        assert detect_chrom_naming_mismatch({"1"}, {"1", "2", "X"}) is None
+
+    def test_empty_inputs_return_none(self):
+        from plexus.utils.utils import detect_chrom_naming_mismatch
+
+        assert detect_chrom_naming_mismatch(set(), {"chr1"}) is None
+        assert detect_chrom_naming_mismatch({"chr1"}, set()) is None
+
+    def test_no_overlap_even_after_stripping_returns_none(self):
+        """chr1 panel vs completely unrelated VCF contigs → no mismatch inferred."""
+        from plexus.utils.utils import detect_chrom_naming_mismatch
+
+        # VCF has no plain numbers matching stripped panel chroms
+        assert (
+            detect_chrom_naming_mismatch({"chr1"}, {"NC_000001", "NC_000007"}) is None
+        )
+
+    def test_warning_logged_during_intersection(self, tmp_path):
+        """Integration: mismatch warning is emitted by intersect_vcf_with_regions."""
+        from unittest.mock import MagicMock, patch
+
+        from plexus.snpcheck.snp_data import intersect_vcf_with_regions
+
+        # Panel uses chr1; VCF contigs use plain 1
+        panel = _make_panel([_make_junction(chrom="chr1")])
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stderr = ""
+
+        with (
+            patch("plexus.snpcheck.snp_data._check_bcftools", return_value="bcftools"),
+            patch(
+                "plexus.snpcheck.snp_data.get_vcf_contigs",
+                return_value={"1", "7", "X"},  # Ensembl-style, no chr prefix
+            ),
+            patch("subprocess.run", return_value=mock_result),
+            patch("plexus.snpcheck.snp_data.logger") as mock_logger,
+        ):
+            fake_vcf = tmp_path / "fake.vcf.gz"
+            fake_vcf.touch()
+            intersect_vcf_with_regions(fake_vcf, panel, tmp_path)
+
+        warning_calls = [str(call) for call in mock_logger.warning.call_args_list]
+        assert any("naming mismatch" in w.lower() for w in warning_calls)
+
+
 class TestGetSnpVcf:
     def test_user_vcf_returned_directly(self, tmp_path):
         """User-provided VCF is returned without intersection."""

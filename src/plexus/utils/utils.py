@@ -1,6 +1,9 @@
+import re
+import shutil
 import subprocess
 import time
 import warnings
+from pathlib import Path
 
 from loguru import logger
 
@@ -70,6 +73,84 @@ def run_command(
             raise e
 
     return None  # Should not reach here if check=True
+
+
+def get_vcf_contigs(vcf_path: Path) -> set[str]:
+    """Get the set of contig names declared in the VCF header.
+
+    Uses ``bcftools view --header-only`` and parses ``##contig=<ID=...>`` lines.
+    """
+    bcftools = shutil.which("bcftools")
+    if bcftools is None:
+        raise RuntimeError("bcftools is required but not found on PATH.")
+
+    result = run_command(
+        [bcftools, "view", "--header-only", str(vcf_path)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    contigs = set()
+    for line in result.stdout.splitlines():
+        m = re.match(r"##contig=<ID=([^,>]+)", line)
+        if m:
+            contigs.add(m.group(1))
+    return contigs
+
+
+def get_fasta_contigs(fasta_path: Path) -> set[str]:
+    """Get the set of contig names in a FASTA file using its .fai index."""
+    import pysam
+
+    fai_path = Path(str(fasta_path) + ".fai")
+    if not fai_path.exists():
+        logger.debug(f"Building .fai index for {fasta_path.name} to get contigs...")
+        pysam.faidx(str(fasta_path))
+
+    return set(pysam.FastaFile(str(fasta_path)).references)
+
+
+def detect_chrom_naming_mismatch(
+    subject_chroms: set[str],
+    vcf_contigs: set[str],
+) -> str | None:
+    """Detect chr-prefix naming mismatches between two sets of contig names.
+
+    Returns a descriptive warning string if a systematic mismatch is detected
+    (one side uses 'chr' prefix, the other does not), or None if naming is consistent
+    or no comparison is possible.
+    """
+    if not subject_chroms or not vcf_contigs:
+        return None
+
+    subject_has_chr = any(c.startswith("chr") for c in subject_chroms)
+    vcf_has_chr = any(c.startswith("chr") for c in vcf_contigs)
+
+    if subject_has_chr and not vcf_has_chr:
+        stripped = {
+            c.removeprefix("chr") for c in subject_chroms if c.startswith("chr")
+        }
+        if stripped & vcf_contigs:
+            return (
+                "Chromosome naming mismatch: the input uses 'chr'-prefixed names "
+                "(e.g. 'chr1') but the SNP VCF uses plain numbers (e.g. '1'). "
+                "SNP checking will return zero variants for all targets. "
+                "Provide a VCF whose contig names match your FASTA, or update "
+                "your input coordinates."
+            )
+
+    if not subject_has_chr and vcf_has_chr:
+        prefixed = {"chr" + c for c in subject_chroms}
+        if prefixed & vcf_contigs:
+            return (
+                "Chromosome naming mismatch: the input uses plain chromosome numbers "
+                "(e.g. '1') but the SNP VCF uses 'chr'-prefixed names (e.g. 'chr1'). "
+                "SNP checking will return zero variants for all targets. "
+                "Provide a VCF whose contig names match your FASTA, or update "
+                "your input coordinates."
+            )
+
+    return None
 
 
 def write_fasta_from_dict(input_dt: dict, output_fasta: str) -> None:

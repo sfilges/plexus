@@ -200,25 +200,21 @@ near-full disks.
 
 ---
 
-### CLI-01 · `plexus init` template generation (partially addressed in v0.4.5)
+### ~~CLI-01 · `plexus template` generation~~ ✅ Fixed in v0.4.6
 
 **Severity: Important · File: `src/plexus/cli.py`**
 
-Extend the existing `plexus init` command to generate starter files for a new design workspace:
+Provide a command to generate starter files for a new design workspace:
 
-- Write a template `junctions.csv` with the correct column headers and an example row.
-- Write a `designer_config.json` pre-populated with the default preset values, ready to edit.
+- Write a template `junctions.csv` with the correct column headers and example rows.
+- Write a `designer_config.json` pre-populated with the default preset values.
 
-This gives new users a concrete starting point without reading the docs. Keep the command
-non-interactive — parameters are passed as flags, consistent with the existing `--genome`
-and `--fasta` options.
+This gives new users a concrete starting point without reading the docs.
 
 **v0.4.5 progress:** `plexus init` restructured to require explicit `--fasta`/`--snp-vcf`
-by default; downloads demoted to `--download` flag. Added `--mode` and `--checksums` flags.
-Template generation (junctions.csv, designer_config.json) still pending.
+by default.
 
-**Deferred to v1.x:** Interactive preset selection wizard, vendor-specific oligo ordering
-formats (e.g. IDT plate layout), and workspace-level checksum enforcement profiles.
+**v0.4.6 progress:** Implemented as a dedicated `plexus template` command.
 
 ---
 
@@ -257,33 +253,54 @@ This bypasses the loguru logger and breaks log capture in tests and pipeline log
 
 ---
 
-### DOC-01 · Document input CSV format
+### ~~DOC-01 · Document input CSV format~~ ✅ Fixed in v0.4.6
 
 **Severity: Important**
 
-The required and optional column names for the junction CSV (`Name`, `Chrom`,
-`Five_Prime_Coordinate`, `Three_Prime_Coordinate`, `Panel`) are inferred only from reading the
-`JunctionInput` Pydantic model. No user-facing documentation exists. Add a `docs/input_format.md`
-or a section in the README that specifies:
+**Completed**: Added comprehensive input CSV documentation in the updated user guide (`docs/user_guide.md`).
 
-- Required columns and types
-- Coordinate convention (1-based, half-open, closed?)
-- Optional `Panel` column behaviour
-- Chromosome naming requirements (must match FASTA header names exactly)
-- Example CSV
+**Covered Topics:**
+- Required columns: `Name`, `Chrom`, `Five_Prime_Coordinate`, `Three_Prime_Coordinate`
+- Optional `Panel` column for multi-panel design
+- Coordinate system: 1-based genomic coordinates
+- Chromosome naming requirements (must match FASTA headers)
+- Complete example CSV with annotations
+- Multi-panel design workflow
+- Coordinate system explanation and examples
+
+**Location**: See "Step-by-Step Workflow > Input Preparation" section in the user guide.
 
 ---
 
-### DOC-02 · Chromosome naming validation
+### ~~DOC-02 · Chromosome naming validation~~ ✅ Fixed in v0.4.6
 
-**Severity: Important · File: `src/plexus/snpcheck/snp_data.py`**
+**Severity: Important · File: `src/plexus/snpcheck/snp_data.py`, `src/plexus/resources.py`**
 
 If the FASTA uses `chr1` notation but the gnomAD VCF uses `1` (or vice versa), bcftools region
 queries silently return zero variants. There is currently no check or warning for this mismatch.
-Add a pre-flight validation that compares a sample of FASTA sequence names against the VCF contig
-list and warns (or errors) on a naming mismatch. The existing `_get_vcf_contigs()` function
-already retrieves the VCF contig set; the FASTA contig names can be obtained from pysam's
-`FastaFile.references`.
+
+**Fix:** Added `detect_chrom_naming_mismatch()` helper that compares contig names and detects
+systematic `chr`-prefix mismatches.
+
+- **Runtime check**: The check runs inside `intersect_vcf_with_regions()` immediately after the
+  VCF contig list is obtained, emitting a descriptive `logger.warning()`.
+- **Early validation**: Integrated into `plexus init` via `src/plexus/resources.py`. In `research`
+  mode, a mismatch triggers a warning during resource registration. In `compliance` mode, the
+  mismatch is treated as a fatal error and aborts initialization.
+
+This ensures users are notified of naming conflicts before starting a production run.
+
+---
+
+### TEST-01 · End-to-end integration test with real BLAST
+
+**File: `tests/test_integration.py`**
+
+All existing integration tests mock BLAST, the annotator, and the AmpliconFinder. Add at least
+one end-to-end test that exercises the full pipeline against the fixture BLAST database in
+`tests/data/` without mocking, using the synthetic FASTA already present in `conftest.py`. This
+would catch regressions in the BLAST runner, annotator annotation logic (including BUG-01 above),
+and AmpliconFinder pairing logic together.
 
 ---
 
@@ -404,6 +421,7 @@ question during panel validation.
 ---
 
 ### PERF-01 · Enable parallel primer thermodynamics by default
+
 **File: `src/plexus/designer/design.py`**
 
 `design_multiplex_primers()` accepts a `parallel=False` parameter that enables concurrent
@@ -477,22 +495,10 @@ project.
 
 ---
 
-### TEST-01 · End-to-end integration test with real BLAST
-
-**File: `tests/test_integration.py`**
-
-All existing integration tests mock BLAST, the annotator, and the AmpliconFinder. Add at least
-one end-to-end test that exercises the full pipeline against the fixture BLAST database in
-`tests/data/` without mocking, using the synthetic FASTA already present in `conftest.py`. This
-would catch regressions in the BLAST runner, annotator annotation logic (including BUG-01 above),
-and AmpliconFinder pairing logic together.
-
----
-
 ## Summary Table
 
 | ID | Description | Version | Severity | Status |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | ~~BUG-01~~ | ~~Fix `from_3prime` annotation (`qlen` vs `length`)~~ | ~~v1.0~~ | ~~Critical~~ | ✅ v0.4.4 |
 | ~~BUG-02~~ | ~~Fix `product_bp` off-by-one in AmpliconFinder~~ | ~~v1.0~~ | ~~Minor~~ | ✅ v0.4.4 |
 | ~~BUG-03~~ | ~~Fix BLAST+ v5 database detection~~ | ~~v1.0~~ | ~~Important~~ | ✅ v0.4.4 |
@@ -505,8 +511,8 @@ and AmpliconFinder pairing logic together.
 | CLI-01 | `plexus init` template generation | v1.0 | Important | Partial v0.4.5 |
 | ~~ARCH-02~~ | ~~Clarify `design_start` coordinate convention~~ | ~~v1.0~~ | ~~Minor~~ | ✅ v0.4.5 |
 | ~~ARCH-03~~ | ~~Replace `print()` with `logger` in blast_runner~~ | ~~v1.0~~ | ~~Minor~~ | ✅ v0.4.4 |
-| DOC-01 | Document input CSV format | v1.0 | Important | |
-| DOC-02 | Chromosome naming validation / pre-flight check | v1.0 | Important | |
+| ~~DOC-01~~ | ~~Document input CSV format~~ | ~~v1.0~~ | ~~Important~~ | ✅ v0.4.6 |
+| ~~DOC-02~~ | ~~Chromosome naming validation / pre-flight check~~ | ~~v1.0~~ | ~~Important~~ | ✅ v0.4.6 |
 | ARCH-01 | Implement plexity penalty in cost function | v1.1 | Important | |
 | ISPCR-01 | ntthal ΔG scoring for BLAST binding sites | v1.1 | Important | |
 | ISPCR-02 | ΔG-weighted off-target cost in selector | v1.1 | Important | |

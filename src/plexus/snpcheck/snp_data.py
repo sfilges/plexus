@@ -13,7 +13,6 @@
 from __future__ import annotations
 
 import os
-import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -27,7 +26,11 @@ from plexus.snpcheck.resources import (
     is_resource_available,
 )
 from plexus.utils.env import check_executable
-from plexus.utils.utils import run_command
+from plexus.utils.utils import (
+    detect_chrom_naming_mismatch,
+    get_vcf_contigs,
+    run_command,
+)
 
 
 def _check_bcftools() -> str:
@@ -40,28 +43,6 @@ def _check_bcftools() -> str:
             "Install with: conda install -c bioconda bcftools"
         )
     return bcftools
-
-
-def _get_vcf_contigs(vcf_path: Path) -> set[str]:
-    """Get the set of contig names declared in the VCF header.
-
-    Uses ``bcftools view --header-only`` and parses ``##contig=<ID=...>`` lines.
-    This approach works regardless of how the index was created (tabix or bcftools)
-    and does not require count metadata in the index.
-    """
-    bcftools = _check_bcftools()
-    result = run_command(
-        [bcftools, "view", "--header-only", str(vcf_path)],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    contigs = set()
-    for line in result.stdout.splitlines():
-        m = re.match(r"##contig=<ID=([^,>]+)", line)
-        if m:
-            contigs.add(m.group(1))
-    return contigs
 
 
 def _write_regions_bed(
@@ -158,7 +139,18 @@ def intersect_vcf_with_regions(
         # Pre-filter contigs to avoid bcftools crashing on missing contigs
         logger.debug(f"Getting contig list from {vcf_path}...")
         try:
-            vcf_contigs = _get_vcf_contigs(vcf_path)
+            vcf_contigs = get_vcf_contigs(vcf_path)
+
+            # DOC-02: detect chr-prefix mismatch before silently producing empty results
+            panel_chroms = {
+                junction.chrom
+                for junction in panel.junctions
+                if getattr(junction, "chrom", None) is not None
+            }
+            mismatch_msg = detect_chrom_naming_mismatch(panel_chroms, vcf_contigs)
+            if mismatch_msg:
+                logger.warning(mismatch_msg)
+
             bed_path = _write_regions_bed(
                 panel, tmpdir_path, padding, valid_contigs=vcf_contigs
             )

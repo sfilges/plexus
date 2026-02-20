@@ -20,6 +20,12 @@ from pathlib import Path
 
 from loguru import logger
 
+from plexus.utils.utils import (
+    detect_chrom_naming_mismatch,
+    get_fasta_contigs,
+    get_vcf_contigs,
+)
+
 # ---------------------------------------------------------------------------
 # Cache directory
 # ---------------------------------------------------------------------------
@@ -559,7 +565,29 @@ def init_genome(
         else:
             logger.info("BLAST index already present, skipping.")
 
-    # ── Step 5: Register with checksums ──────────────────────────────────────
+    # ── Step 5: Chromosome naming validation ─────────────────────────────────
+    if resolved_vcf is not None:
+        mismatch = None
+        try:
+            logger.info("Verifying chromosome naming consistency...")
+            fasta_contigs = get_fasta_contigs(fasta_path)
+            vcf_contigs = get_vcf_contigs(resolved_vcf)
+            mismatch = detect_chrom_naming_mismatch(fasta_contigs, vcf_contigs)
+        except Exception as e:
+            logger.warning(f"Could not verify chromosome naming consistency: {e}")
+
+        if mismatch:
+            # In compliance/clinical mode, this is a fatal error.
+            # In research mode, it is a loud warning.
+            logger.warning(f"Resource naming conflict detected: {mismatch}")
+            if get_operational_mode() == "compliance":
+                logger.error(
+                    "Clinical/Compliance mode active: initialization aborted "
+                    "due to naming mismatch."
+                )
+                raise ValueError(mismatch)
+
+    # ── Step 6: Register with checksums ──────────────────────────────────────
     _register_genome_resources(
         genome,
         fasta_path,

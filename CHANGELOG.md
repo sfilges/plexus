@@ -5,6 +5,31 @@ All notable changes to plexus will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.6] - 20-02-2026
+
+### Added
+
+- **`plexus template` command**: New command to generate starter files (`junctions.csv`, `designer_config.json`) for a new design workspace, improving the onboarding experience.
+- **Early Chromosome Naming Validation**: Integrated naming consistency checks into `plexus init`.
+  - Automatically compares FASTA and VCF contig names during resource registration.
+  - In `compliance` mode, initialization fails if a mismatch is detected (e.g., `chr1` vs `1`).
+  - In `research` mode, a loud warning is issued.
+- **Shared Naming Utilities**: Moved naming mismatch detection to `plexus.utils.utils` for reuse across the codebase.
+- **DOC-01 · Comprehensive User Guide**: Complete rewrite of `docs/user_guide.md` with detailed documentation
+  - **Compliance and Clinical Use** section with checksum requirements, workflow best practices, and documentation structure
+- **Compliance Mode Documentation**: Detailed explanation of compliance mode requirements
+- **Dependency Version Handling**: New section explaining that while compliance mode records tool versions in provenance, it does NOT enforce specific versions. Includes recommendations for clinical users to implement their own version validation workflows.
+
+### Updated
+
+- **ROADMAP.md**: Marked DOC-01 as completed in v0.4.6
+- **User Guide Structure**: Reorganized from stub format to comprehensive 10-section guide
+- **Input CSV Documentation**: Fully documented required/optional columns, coordinate systems, and examples (addresses DOC-01)
+
+### Fixed
+
+- **DOC-01 · Document input CSV format**: Resolved by adding comprehensive input documentation in user guide
+
 ## [0.4.5] - 19-02-2026
 
 ### Added
