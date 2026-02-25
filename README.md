@@ -28,6 +28,20 @@
 - Python 3.10–3.13
 - NCBI BLAST+ (for specificity checks — `blastn` must be on `$PATH`)
 - `bcftools` (for SNP checking — must be on `$PATH`)
+- `htslib` (C library required by `pysam`)
+
+#### Debian / Ubuntu
+
+```bash
+sudo apt-get update
+sudo apt-get install -y ncbi-blast+ bcftools libhts-dev
+```
+
+#### macOS (Homebrew)
+
+```bash
+brew install blast bcftools htslib
+```
 
 ### Using uv (Recommended)
 

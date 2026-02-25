@@ -29,6 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `TestPrimerDimerPredictor` (13 tests): state validation guards (`ValueError` before `set_primers`/`align`), scoring direction (complementary pair → negative, poly-A vs poly-C → positive, self-complementary palindrome → negative), return-type assertions for `PrimerAlignment`, alignment-string content, parameter-cache population, and an end-to-end extension-bonus integration test confirming a 3′-overlapping pair scores more negatively than an otherwise identical 5′-overlapping pair.
 - **Pipeline provenance test for `panel_summary.json`** (`tests/test_pipeline.py`): `test_panel_summary_has_completed_status` runs a full mocked pipeline and asserts that `panel_summary.json` contains `provenance.status == "completed"` and a non-null `completed_at`.
 
+### Changed
+
+- **Conda environment file** (`config/environment.yml`): Updated to use `pip:` for Python dependencies. This ensures that `primer3-py` and `pysam` are installed from PyPI, which is the recommended way to install these packages in a Conda environment.
+- **Updated Readme** (`README.md`): Updated to include instructions on how to install the package and how to use it.
+
 ## [1.0.0b2] - 25-02-2026
 
 ### Added
