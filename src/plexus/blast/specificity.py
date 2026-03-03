@@ -16,9 +16,13 @@ def run_specificity_check(
     *,
     length_threshold: int = 15,
     evalue_threshold: float = 10.0,
-    max_mismatches: int = 2,
+    max_mismatches: int = 3,
     max_amplicon_size: int = 2000,
     ontarget_tolerance: int = 5,
+    blast_evalue: float = 30000.0,
+    blast_word_size: int = 7,
+    blast_reward: int = 1,
+    blast_penalty: int = -1,
 ):
     """
     Run BLAST on all candidate primers in the panel to check for specificity
@@ -36,6 +40,10 @@ def run_specificity_check(
         max_mismatches: Maximum mismatches in a 3'-anchored alignment.
         max_amplicon_size: Maximum amplicon size (bp) to consider.
         ontarget_tolerance: Coordinate tolerance (bp) for on-target classification.
+        blast_evalue: E-value passed to blastn via -evalue to control search sensitivity.
+        blast_word_size: Word size passed to blastn via -word_size.
+        blast_reward: Match reward passed to blastn via -reward.
+        blast_penalty: Mismatch penalty passed to blastn via -penalty.
     """
     logger.info("Starting specificity check (BLAST)...")
     os.makedirs(work_dir, exist_ok=True)
@@ -59,7 +67,14 @@ def run_specificity_check(
     runner = BlastRunner(input_fasta, genome_fasta)
     runner.create_database()
     try:
-        runner.run(output_archive=blast_archive, num_threads=num_threads)
+        runner.run(
+            output_archive=blast_archive,
+            num_threads=num_threads,
+            evalue=blast_evalue,
+            word_size=blast_word_size,
+            reward=blast_reward,
+            penalty=blast_penalty,
+        )
         runner.reformat_output_as_table(blast_table)
     finally:
         if os.path.exists(blast_archive):

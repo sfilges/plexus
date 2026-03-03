@@ -210,6 +210,43 @@ def reverse_complement(dna: str) -> str:
 # ===============================================
 
 
+def find_max_poly_gc(kmer: str, n: int) -> bool:
+    """Check if a DNA sequence has a homopolymer run of G or C exceeding *n*.
+
+    Same logic as :func:`find_max_poly_X` (counts consecutive *identical*
+    bases) but only triggers when the repeated base is G or C.
+
+    Parameters
+    ----------
+    kmer : str
+        The DNA sequence to check.
+    n : int
+        Maximum allowed consecutive identical G/C bases.
+
+    Returns
+    -------
+    bool
+        True if a run of G or C exceeding *n* is found, False otherwise.
+    """
+    if len(kmer) <= n:
+        return False
+
+    kmer = kmer.upper()
+    current_base = kmer[0]
+    count = 1
+
+    for i in range(1, len(kmer)):
+        if kmer[i] == current_base:
+            count += 1
+            if count > n and current_base in "GC":
+                return True
+        else:
+            current_base = kmer[i]
+            count = 1
+
+    return False
+
+
 def generate_kmers(
     target_name: str,
     target_sequence: str,
@@ -222,6 +259,7 @@ def generate_kmers(
     min_gc: int = 30,
     max_gc: int = 70,
     gc_clamp: int = 0,
+    max_poly_gc: int = 3,
 ) -> list:
     """
     Generate k-mers as candidate primers.
@@ -237,6 +275,7 @@ def generate_kmers(
         max_N - Max times N bases can occur anywhere in the kmer
         min_gc - Minimum GC content of kmer
         max_gc - Maximum GC content of kmer
+        max_poly_gc - Max consecutive G or C bases allowed
     """
     from plexus.designer.primer import Primer
 
@@ -279,6 +318,7 @@ def generate_kmers(
                 min_gc=min_gc,
                 max_gc=max_gc,
                 gc_clamp=gc_clamp,
+                max_poly_gc=max_poly_gc,
             ):
                 kmer_filtered_counter += 1
 
@@ -331,23 +371,25 @@ def check_kmer(
     min_gc: int = 30,
     max_gc: int = 70,
     gc_clamp: int = 0,
+    max_poly_gc: int = 3,
 ) -> bool:
     """
     Filter kmers (putative primers) based on GC-content, number of 'N' bases,
-    and number of repeated bases (polyX).
+    number of repeated bases (polyX), and consecutive G/C runs.
     """
     kmer_gc = gc_content(kmer)
     passed = (
         min_gc <= kmer_gc <= max_gc  # Should be True
         and not check_N_in_kmers(kmer, max_N)  # Should be False
         and not find_max_poly_X(kmer, max_poly_X)  # Should be False
+        and not find_max_poly_gc(kmer, max_poly_gc)  # Should be False
     )
     if passed and gc_clamp > 0 and not check_gc_clamp(kmer):
         return False
     return passed
 
 
-def filter_kmers(kmers, max_poly_X=4, max_N=0):
+def filter_kmers(kmers, max_poly_X=4, max_N=0, max_poly_gc=3):
     """
     Filter kmers (putative primers).
     """
@@ -364,6 +406,10 @@ def filter_kmers(kmers, max_poly_X=4, max_N=0):
 
         # Exclude kmers with too many repeated bases.
         if find_max_poly_X(kmer, max_poly_X):
+            continue
+
+        # Exclude kmers with too many consecutive G/C bases.
+        if find_max_poly_gc(kmer, max_poly_gc):
             continue
 
         filtered_kmers.append(kmer)

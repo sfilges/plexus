@@ -151,6 +151,51 @@ def test_run_omits_num_threads_when_1(runner, tmp_path):
         assert "-num_threads" not in cmd
 
 
+def test_run_includes_evalue_when_provided(runner, tmp_path):
+    """evalue parameter is included in the blastn command when set."""
+    output_archive = str(tmp_path / "out.asn")
+    runner.db_path = "/fake/db"
+    with patch("subprocess.run") as mock_run:
+        runner.run(output_archive, evalue=1000.0)
+        cmd = mock_run.call_args[0][0]
+        assert "-evalue" in cmd
+        assert "1000.0" in cmd
+
+
+def test_run_omits_evalue_when_none(runner, tmp_path):
+    """evalue parameter is omitted from the blastn command when None."""
+    output_archive = str(tmp_path / "out.asn")
+    runner.db_path = "/fake/db"
+    with patch("subprocess.run") as mock_run:
+        runner.run(output_archive, evalue=None)
+        cmd = mock_run.call_args[0][0]
+        assert "-evalue" not in cmd
+
+
+def test_run_includes_reward_penalty_when_provided(runner, tmp_path):
+    """reward and penalty parameters are included in the blastn command."""
+    output_archive = str(tmp_path / "out.asn")
+    runner.db_path = "/fake/db"
+    with patch("subprocess.run") as mock_run:
+        runner.run(output_archive, reward=1, penalty=-1)
+        cmd = mock_run.call_args[0][0]
+        assert "-reward" in cmd
+        assert "1" in cmd
+        assert "-penalty" in cmd
+        assert "-1" in cmd
+
+
+def test_run_omits_reward_penalty_when_none(runner, tmp_path):
+    """reward and penalty are omitted from the blastn command when None."""
+    output_archive = str(tmp_path / "out.asn")
+    runner.db_path = "/fake/db"
+    with patch("subprocess.run") as mock_run:
+        runner.run(output_archive, reward=None, penalty=None)
+        cmd = mock_run.call_args[0][0]
+        assert "-reward" not in cmd
+        assert "-penalty" not in cmd
+
+
 def test_get_dataframe(runner, tmp_path):
     output_table = tmp_path / "output.txt"
     runner.output_table = str(output_table)

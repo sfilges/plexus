@@ -70,7 +70,8 @@ class SingleplexDesignParameters(BaseModel):
     )
 
     # Sequence composition constraints
-    primer_max_poly_x: int = Field(default=5, ge=1, le=10)
+    primer_max_poly_x: int = Field(default=4, ge=1, le=10)
+    primer_max_poly_gc: int = Field(default=3, ge=1, le=10)
     primer_max_n: int = Field(default=0, ge=0, le=5)
 
     # Thermodynamic thresholds (°C)
@@ -272,13 +273,51 @@ class BlastParameters(BaseModel):
         ),
     )
     max_mismatches: int = Field(
-        default=2,
+        default=3,
         ge=0,
         le=5,
         description=(
             "Maximum mismatches allowed in a 3'-anchored alignment for it to be "
-            "classified as 'predicted bound'. A primer with 1-2 mismatches in a "
+            "classified as 'predicted bound'. A primer with 1-3 mismatches in a "
             "15+ bp 3' stretch will still extend in PCR."
+        ),
+    )
+    blast_evalue: float = Field(
+        default=30000.0,
+        gt=0.0,
+        description=(
+            "E-value passed to blastn via -evalue. Matches the Primer-BLAST "
+            "default (30000) to ensure short, gapped primer alignments are "
+            "not silently dropped by BLAST before plexus can evaluate them."
+        ),
+    )
+    blast_word_size: int = Field(
+        default=7,
+        ge=4,
+        le=28,
+        description=(
+            "Word size passed to blastn via -word_size. Matches the "
+            "Primer-BLAST / blastn-short default of 7, which is appropriate "
+            "for primer-length queries (<30 bp)."
+        ),
+    )
+    blast_reward: int = Field(
+        default=1,
+        ge=1,
+        le=5,
+        description="Match reward passed to blastn via -reward.",
+    )
+    blast_penalty: int = Field(
+        default=-1,
+        ge=-5,
+        le=-1,
+        description=(
+            "Mismatch penalty passed to blastn via -penalty. "
+            "The blastn-short default (-3) causes 3-mismatch paralog alignments "
+            "to score too low (E > 100,000) for BLAST to report them. "
+            "A gentler penalty (-1) keeps these alignments reportable "
+            "(E ~ 70 for a 21bp primer with 3 mismatches) while the annotator's "
+            "3'-anchored filters still reject true noise."
         ),
     )
     max_amplicon_size: int = Field(

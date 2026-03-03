@@ -178,6 +178,10 @@ def test_run_specificity_check_forwards_blast_parameters(mock_panel, tmp_path):
             evalue_threshold=5.0,
             max_mismatches=1,
             max_amplicon_size=5000,
+            blast_evalue=500.0,
+            blast_word_size=11,
+            blast_reward=2,
+            blast_penalty=-3,
         )
 
         # Verify annotator received custom thresholds
@@ -187,6 +191,13 @@ def test_run_specificity_check_forwards_blast_parameters(mock_panel, tmp_path):
 
         # Verify finder received custom max amplicon size
         finder_instance.find_amplicons.assert_called_once_with(max_size_bp=5000)
+
+        # Verify blast parameters were forwarded to runner.run()
+        _, run_kwargs = runner_instance.run.call_args
+        assert run_kwargs.get("evalue") == 500.0
+        assert run_kwargs.get("word_size") == 11
+        assert run_kwargs.get("reward") == 2
+        assert run_kwargs.get("penalty") == -3
 
 
 def test_run_specificity_check_no_hits(mock_panel, tmp_path):

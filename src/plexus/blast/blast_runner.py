@@ -91,7 +91,14 @@ class BlastRunner:
         return self
 
     def run(
-        self, output_archive, word_size=None, task="blastn-short", num_threads: int = 1
+        self,
+        output_archive,
+        word_size=None,
+        task="blastn-short",
+        num_threads: int = 1,
+        evalue: float | None = None,
+        reward: int | None = None,
+        penalty: int | None = None,
     ):
         """
         Run blast, writing a BLAST archive to `output_archive`.
@@ -120,6 +127,12 @@ class BlastRunner:
         ]
         if word_size is not None:
             cmd.extend(["-word_size", str(word_size)])
+        if evalue is not None:
+            cmd.extend(["-evalue", str(evalue)])
+        if reward is not None:
+            cmd.extend(["-reward", str(reward)])
+        if penalty is not None:
+            cmd.extend(["-penalty", str(penalty)])
         if num_threads > 1:
             cmd.extend(["-num_threads", str(num_threads)])
 

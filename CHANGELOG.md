@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-03-03
+
+### Changed
+
+- **BLAST E-value raised to Primer-BLAST default** (`config.py`): `blast_evalue` 1000 → 30000 to match the Primer-BLAST default and ensure short, gapped primer alignments are not silently dropped.
+- **BLAST word size now explicit** (`config.py`, `specificity.py`, `pipeline.py`): New `blast_word_size` field (default 7) passed to `blastn -word_size`, matching the Primer-BLAST / blastn-short default. Previously relied on the implicit blastn-short default; now configurable.
+- **Tightened poly-X default** (`config.py`): `primer_max_poly_x` default lowered from 5 to 4.
+- **Increased BLAST `max_mismatches` default** (`config.py`): 2 → 3 so that 3-mismatch paralog alignments (e.g. DCAF12L1) are classified as "predicted bound".
+- **BLAST mismatch penalty** (`config.py`): New `blast_penalty` default changed from the blastn-short default of -3 to -1. With reward=1/penalty=-3, a 21bp primer with 3 mismatches scores only 9 (E ≈ 190,000) and is silently dropped by BLAST. With penalty=-1, the same alignment scores 15 (E ≈ 70), making paralog off-targets like DCAF12L1 detectable.
+- Updated both `designer_default_config.json` and `designer_lenient_config.json` to match the new defaults.
+
+### Added
+
+- **G/C-specific poly-run filter** (`utils.py`): New `find_max_poly_gc()` function rejects primers with homopolymer runs of G or C exceeding `primer_max_poly_gc` (default 3). This catches primers like the DCAF12L2 `GGGGCCGGATGTTCTGCTG` forward primer that passed the old poly-X filter. Wired through `check_kmer()`, `generate_kmers()`, `filter_kmers()`, and `design.py`.
+- **BLAST `-evalue` parameter** (`config.py`, `blast_runner.py`, `specificity.py`, `pipeline.py`): New `blast_evalue` field (default 30000.0) passed to `blastn -evalue`, ensuring weak but real off-target alignments are not silently dropped before the annotator can evaluate them.
+- **BLAST `-reward` / `-penalty` parameters** (`config.py`, `blast_runner.py`, `specificity.py`, `pipeline.py`): New `blast_reward` (default 1) and `blast_penalty` (default -1) fields override the blastn-short scoring defaults, improving sensitivity for mismatched paralog alignments.
+- Tests for `find_max_poly_gc`, `check_kmer` poly-GC integration, BLAST evalue/reward/penalty/word_size parameter forwarding, and specificity check threading.
+
 ## [1.0.0] - 2026-03-03
 
 First stable release. All v1.0 roadmap items complete — see `docs/ROADMAP.md` for the full list.

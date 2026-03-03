@@ -534,6 +534,10 @@ def run_pipeline(
                     max_mismatches=blast_config.max_mismatches,
                     max_amplicon_size=blast_config.max_amplicon_size,
                     ontarget_tolerance=blast_config.ontarget_tolerance,
+                    blast_evalue=blast_config.blast_evalue,
+                    blast_word_size=blast_config.blast_word_size,
+                    blast_reward=blast_config.blast_reward,
+                    blast_penalty=blast_config.blast_penalty,
                 )
                 result.steps_completed.append("specificity_checked")
                 logger.info("Specificity check complete")
