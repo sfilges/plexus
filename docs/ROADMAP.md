@@ -13,6 +13,8 @@ not necessarily by implementation order.
 
 ## v1.0 — Production Release
 
+> **Released: 2026-03-03** — All 21 items resolved (19 implemented, 1 cancelled, 1 was TEST-01).
+
 The v1.0 milestone covers correctness issues, science-blocking bugs, and architecture gaps that
 would compromise the reliability of a clinical-grade tool.
 

@@ -198,7 +198,7 @@ plexus docker \
 To run a specific tagged version or pass through extra `plexus run` flags:
 
 ```bash
-plexus docker --tag 1.0.0b2 \
+plexus docker --tag 1.0.0 \
   --fasta /data/hg38.fa \
   --input /data/junctions.csv \
   --output /data/results/ \

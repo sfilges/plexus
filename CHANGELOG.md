@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-03-03
+
+First stable release. All v1.0 roadmap items complete — see `docs/ROADMAP.md` for the full list.
+Includes correctness fixes (BLAST annotation, coordinate handling, off-target filtering),
+compliance/audit infrastructure (provenance tracking, checksum verification, reproducible selectors),
+panel QC reporting, and CLI improvements (template generation, Docker wrapper, init wizard).
+
+No code changes from 1.0.0b4; this release promotes the beta to stable after final verification.
+
 ## [1.0.0b4] - 03-03-2026
 
 ### Changed
