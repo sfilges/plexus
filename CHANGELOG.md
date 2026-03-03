@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0b4] - 03-03-2026
+
+### Changed
+
+- **Automatic BLAST archive cleanup (`specificity.py`)**: The BLAST archive file (outfmt 11, can be 20 GB+) is now automatically deleted after the tabular output is produced. Wrapped in `try/finally` so the archive is removed even if an error occurs during the run or reformat step.
+- **Extracted init wizard and Docker wrapper from `cli.py`**: Split two self-contained blocks into their own modules to improve maintainability. `cli_init_wizard.py` contains `_is_interactive()`, `_prompt_path()`, and `_run_init_wizard()`. `cli_docker.py` contains the `docker` command, which registers itself on the shared Typer app via side-effect import. `cli.py` drops from 989 to 666 lines; no public API changes.
+
+### Added
+
+- **Off-target hard filter (`specificity.py`)**: New `filter_offtarget_pairs()` removes primer pairs with BLAST off-target amplicons before multiplex optimization. Per junction, pairs with zero off-targets are kept; when all pairs have off-targets, the pair with fewest is retained as a fallback. Called automatically from `run_pipeline()` after `run_specificity_check()`. Previously the only mechanism was a soft cost penalty (`wt_off_target * count`), which was often insufficient to outweigh thermodynamic scores, allowing off-target-contaminated pairs into the final panel. 5 new tests in `test_blast_specificity.py`.
+- **Configurable BLAST specificity thresholds (`config.py`, `specificity.py`)**: New `BlastParameters` config section with 5 fields that were previously hardcoded: `length_threshold` (default 15), `evalue_threshold` (default 10.0), `max_mismatches` (default 2), `max_amplicon_size` (default 2000), and `ontarget_tolerance` (default 5). These control which BLAST hits are classified as "predicted bound" and how on-target vs off-target amplicons are distinguished. Added to both `designer_default_config.json` and `designer_lenient_config.json` (identical values — physics-based, not stringency-based). `run_specificity_check()` and `_is_on_target()` now accept these as parameters, threaded from `pipeline.py` via `config.blast_parameters`. 9 new tests across `test_config.py` and `test_blast_specificity.py`.
+
 ## [1.0.0b3] - 03-03-2026
 
 ### Fixed

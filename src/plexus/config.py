@@ -248,6 +248,62 @@ class SnpCheckParameters(BaseModel):
     )
 
 
+class BlastParameters(BaseModel):
+    """Parameters for BLAST specificity checking."""
+
+    length_threshold: int = Field(
+        default=15,
+        ge=5,
+        le=30,
+        description=(
+            "Minimum 3'-anchored alignment length (bp) to predict primer binding. "
+            "A BLAST hit with at least this many bases aligned from the 3' end "
+            "is classified as 'predicted bound'."
+        ),
+    )
+    evalue_threshold: float = Field(
+        default=10.0,
+        gt=0.0,
+        description=(
+            "E-value cutoff for predicted binding. Hits with e-value below this "
+            "threshold (and anchored at the 3' end) are classified as 'predicted bound'. "
+            "High default (10) is appropriate for short primer queries where "
+            "e-values are naturally large."
+        ),
+    )
+    max_mismatches: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        description=(
+            "Maximum mismatches allowed in a 3'-anchored alignment for it to be "
+            "classified as 'predicted bound'. A primer with 1-2 mismatches in a "
+            "15+ bp 3' stretch will still extend in PCR."
+        ),
+    )
+    max_amplicon_size: int = Field(
+        default=2000,
+        ge=100,
+        le=50000,
+        description=(
+            "Maximum distance (bp) between two predicted-bound primers for them "
+            "to form an amplicon. Products larger than this are unlikely to "
+            "amplify efficiently under standard PCR conditions."
+        ),
+    )
+    ontarget_tolerance: int = Field(
+        default=5,
+        ge=0,
+        le=50,
+        description=(
+            "Coordinate tolerance (bp) for classifying a BLAST amplicon as on-target. "
+            "A hit is on-target if both primer positions are within this distance "
+            "of the expected genomic coordinates. Absorbs minor BLAST alignment "
+            "shifts while still distinguishing on-target from pseudogene hits."
+        ),
+    )
+
+
 class DesignerConfig(BaseModel):
     """Complete configuration for multiplex primer panel design."""
 
@@ -262,6 +318,7 @@ class DesignerConfig(BaseModel):
         default_factory=MultiplexPickerParameters
     )
     snp_check_parameters: SnpCheckParameters = Field(default_factory=SnpCheckParameters)
+    blast_parameters: BlastParameters = Field(default_factory=BlastParameters)
 
     @classmethod
     def from_json_file(cls, file_path: str | Path) -> DesignerConfig:

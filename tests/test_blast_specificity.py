@@ -43,6 +43,37 @@ def mock_panel():
     return panel
 
 
+def test_blast_archive_removed_after_run(mock_panel, tmp_path):
+    """The BLAST archive file is cleaned up after a successful specificity check."""
+    blast_archive = tmp_path / "blast_archive"
+
+    with (
+        patch("plexus.blast.specificity.BlastRunner") as MockRunner,
+        patch("plexus.blast.specificity.BlastResultsAnnotator") as MockAnnotator,
+        patch("plexus.blast.specificity.AmpliconFinder") as MockFinder,
+    ):
+        runner_instance = MockRunner.return_value
+
+        def fake_run(output_archive, **kwargs):
+            # Simulate BLAST creating the archive file
+            open(output_archive, "w").close()
+
+        runner_instance.run.side_effect = fake_run
+        runner_instance.get_dataframe.return_value = pd.DataFrame({"dummy": [1]})
+
+        annotator_instance = MockAnnotator.return_value
+        annotator_instance.get_predicted_bound.return_value = pd.DataFrame(
+            {"dummy_bound": [1]}
+        )
+
+        finder_instance = MockFinder.return_value
+        finder_instance.amplicon_df = pd.DataFrame()
+
+        run_specificity_check(mock_panel, str(tmp_path), "fake_genome.fa")
+
+        assert not blast_archive.exists(), "BLAST archive should be removed after run"
+
+
 def test_run_specificity_check_integration(mock_panel, tmp_path):
     # Setup mocks for internal classes
     with (
@@ -118,6 +149,44 @@ def test_run_specificity_check_forwards_num_threads(mock_panel, tmp_path):
 
         _, kwargs = runner_instance.run.call_args
         assert kwargs.get("num_threads") == 6
+
+
+def test_run_specificity_check_forwards_blast_parameters(mock_panel, tmp_path):
+    """Custom BLAST parameters are threaded through to annotator and finder."""
+    with (
+        patch("plexus.blast.specificity.BlastRunner") as MockRunner,
+        patch("plexus.blast.specificity.BlastResultsAnnotator") as MockAnnotator,
+        patch("plexus.blast.specificity.AmpliconFinder") as MockFinder,
+        patch("os.makedirs"),
+    ):
+        runner_instance = MockRunner.return_value
+        runner_instance.get_dataframe.return_value = pd.DataFrame({"dummy": [1]})
+
+        annotator_instance = MockAnnotator.return_value
+        annotator_instance.get_predicted_bound.return_value = pd.DataFrame(
+            {"dummy_bound": [1]}
+        )
+
+        finder_instance = MockFinder.return_value
+        finder_instance.amplicon_df = pd.DataFrame()
+
+        run_specificity_check(
+            mock_panel,
+            str(tmp_path),
+            "genome.fa",
+            length_threshold=20,
+            evalue_threshold=5.0,
+            max_mismatches=1,
+            max_amplicon_size=5000,
+        )
+
+        # Verify annotator received custom thresholds
+        annotator_instance.build_annotation_dict.assert_called_once_with(
+            length_threshold=20, evalue_threshold=5.0, max_mismatches=1
+        )
+
+        # Verify finder received custom max amplicon size
+        finder_instance.find_amplicons.assert_called_once_with(max_size_bp=5000)
 
 
 def test_run_specificity_check_no_hits(mock_panel, tmp_path):
@@ -322,6 +391,22 @@ class TestIsOnTarget:
             "R_start": 1201,  # correct reverse
         }
         assert _is_on_target(prod, junction, pair) is False
+
+    def test_custom_tolerance(self):
+        """A larger tolerance classifies previously off-target hits as on-target."""
+        junction = self._make_junction(chrom="chr7", design_start=1000)
+        pair = self._make_pair(
+            fwd_start=10, fwd_length=22, rev_start=180, rev_length=22
+        )
+        prod = {
+            "chrom": "chr7",
+            "F_start": 1020,  # 10bp off from expected 1010
+            "R_start": 1211,  # 10bp off from expected 1201
+        }
+        # Default tolerance=5 -> off-target
+        assert _is_on_target(prod, junction, pair) is False
+        # Custom tolerance=10 -> on-target
+        assert _is_on_target(prod, junction, pair, tolerance=10) is True
 
     def test_missing_design_start_defaults_to_zero(self):
         """Junction without design_start uses 0 as default."""

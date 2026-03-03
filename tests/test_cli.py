@@ -896,7 +896,7 @@ class TestInitWizard:
     @patch("plexus.resources.init_genome")
     @patch("plexus.resources.genome_status")
     @patch("plexus.resources.get_operational_mode", return_value="research")
-    @patch("plexus.cli._is_interactive", return_value=True)
+    @patch("plexus.cli_init_wizard._is_interactive", return_value=True)
     def test_init_wizard_activates_when_tty(
         self, _mock_tty, _mock_mode, mock_status, mock_init
     ):
@@ -915,7 +915,7 @@ class TestInitWizard:
             fa_f.write(b">chr1\nACGT\n")
 
         try:
-            with patch("plexus.cli._run_init_wizard") as mock_wizard:
+            with patch("plexus.cli_init_wizard._run_init_wizard") as mock_wizard:
                 mock_wizard.return_value = {
                     "genome": "hg38",
                     "fasta": Path(fasta_path),
@@ -960,7 +960,7 @@ class TestInitWizard:
             fa_f.write(b">chr1\nACGT\n")
 
         try:
-            with patch("plexus.cli._run_init_wizard") as mock_wizard:
+            with patch("plexus.cli_init_wizard._run_init_wizard") as mock_wizard:
                 result = runner.invoke(
                     app,
                     [

@@ -9,7 +9,16 @@ from plexus.designer.multiplexpanel import MultiplexPanel
 
 
 def run_specificity_check(
-    panel: MultiplexPanel, work_dir: str, genome_fasta: str, num_threads: int = 1
+    panel: MultiplexPanel,
+    work_dir: str,
+    genome_fasta: str,
+    num_threads: int = 1,
+    *,
+    length_threshold: int = 15,
+    evalue_threshold: float = 10.0,
+    max_mismatches: int = 2,
+    max_amplicon_size: int = 2000,
+    ontarget_tolerance: int = 5,
 ):
     """
     Run BLAST on all candidate primers in the panel to check for specificity
@@ -21,6 +30,12 @@ def run_specificity_check(
         panel: The MultiplexPanel object containing junctions and primer designs.
         work_dir: Directory to store temporary BLAST files.
         genome_fasta: Path to the reference genome FASTA file.
+        num_threads: Number of BLAST threads.
+        length_threshold: Minimum 3'-anchored alignment length (bp) to predict binding.
+        evalue_threshold: E-value cutoff for predicted binding.
+        max_mismatches: Maximum mismatches in a 3'-anchored alignment.
+        max_amplicon_size: Maximum amplicon size (bp) to consider.
+        ontarget_tolerance: Coordinate tolerance (bp) for on-target classification.
     """
     logger.info("Starting specificity check (BLAST)...")
     os.makedirs(work_dir, exist_ok=True)
@@ -43,8 +58,13 @@ def run_specificity_check(
 
     runner = BlastRunner(input_fasta, genome_fasta)
     runner.create_database()
-    runner.run(output_archive=blast_archive, num_threads=num_threads)
-    runner.reformat_output_as_table(blast_table)
+    try:
+        runner.run(output_archive=blast_archive, num_threads=num_threads)
+        runner.reformat_output_as_table(blast_table)
+    finally:
+        if os.path.exists(blast_archive):
+            os.remove(blast_archive)
+            logger.debug(f"Removed BLAST archive: {blast_archive}")
 
     blast_df = runner.get_dataframe()
 
@@ -56,14 +76,16 @@ def run_specificity_check(
     target_map = getattr(panel, "primer_target_map", {})
     annotator = BlastResultsAnnotator(blast_df, target_map=target_map)
     annotator.build_annotation_dict(
-        length_threshold=15, evalue_threshold=10, max_mismatches=2
+        length_threshold=length_threshold,
+        evalue_threshold=evalue_threshold,
+        max_mismatches=max_mismatches,
     )
     annotator.add_annotations()
 
     # 5. Find Off-Target Amplicons
     bound_df = annotator.get_predicted_bound()
     finder = AmpliconFinder(bound_df, target_map=target_map)
-    finder.find_amplicons(max_size_bp=2000)
+    finder.find_amplicons(max_size_bp=max_amplicon_size)
 
     all_amplicons_df = finder.amplicon_df
 
@@ -106,7 +128,7 @@ def run_specificity_check(
             off_targets = []
             on_targets = []
             for prod in potential_products:
-                if _is_on_target(prod, junction, pair):
+                if _is_on_target(prod, junction, pair, tolerance=ontarget_tolerance):
                     on_targets.append(prod)
                 else:
                     off_targets.append(prod)
@@ -191,7 +213,7 @@ def filter_offtarget_pairs(panel: MultiplexPanel) -> tuple[int, list[str]]:
     return total_removed, fallback_junctions
 
 
-def _is_on_target(prod: dict, junction, pair) -> bool:
+def _is_on_target(prod: dict, junction, pair, tolerance: int = 5) -> bool:
     """Check if a BLAST amplicon overlaps the intended target region.
 
     Compares the BLAST hit genomic coordinates against the expected
@@ -224,9 +246,8 @@ def _is_on_target(prod: dict, junction, pair) -> bool:
     expected_rev_start = design_start + pair.reverse.start + pair.reverse.length - 1
 
     # Allow small tolerance for BLAST coordinate alignment differences.
-    # 5 bp chosen to absorb minor alignment shifts while still distinguishing
+    # Default 5 bp absorbs minor alignment shifts while still distinguishing
     # on-target hits from nearby off-target loci.
-    tolerance = 5  # bp
     fwd_match = abs(prod["F_start"] - expected_fwd_start) <= tolerance
     rev_match = abs(prod["R_start"] - expected_rev_start) <= tolerance
 
