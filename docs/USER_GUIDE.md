@@ -11,6 +11,7 @@
 7. [Output Interpretation](#output-interpretation)
 8. [Troubleshooting](#troubleshooting)
 9. [Technical Reference](#technical-reference)
+    - [Coordinate Systems](#coordinate-systems-reference)
 10. [Compliance and Clinical Use](#compliance-and-clinical-use)
     - [Two Deployment Paths](#two-compliance-deployment-paths)
     - [The Compliance Manifest](#the-compliance-manifest)
@@ -146,6 +147,8 @@ plexus run -i junctions.csv -g hg38 -o results/
 ### Junction
 
 A **Junction** represents a single genomic target for primer design:
+
+> **Important**: Plexus uses **1-based inclusive genomic coordinates** for all target inputs and final outputs. See the [Coordinate Systems Guide](COORDINATE_SYSTEMS.md) for full details.
 
 ```python
 Junction(
@@ -765,6 +768,18 @@ plexus status
 - Switch to research mode or provide proper checksums
 
 ## Technical Reference
+
+### Coordinate Systems Reference
+
+For a tool where off-by-one errors are safety-critical, understanding the coordinate systems used for inputs, internal processing, and outputs is essential.
+
+| Context | Coordinate System | Base | Inclusive |
+|---------|-------------------|------|-----------|
+| **Input CSV** | Genomic | 1 | Yes |
+| **Output CSV** | Genomic | 1 | Yes |
+| **Internal Offsets** | Design-Region Relative | 0 | Yes |
+
+For more detailed coordinate system specifications and internal handling, please see the [Coordinate Systems Guide](COORDINATE_SYSTEMS.md).
 
 ### CLI Command Reference
 

@@ -10,6 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from plexus.config import (
+    BlastParameters,
     DesignerConfig,
     MultiplexPickerParameters,
     PCRConditions,
@@ -180,6 +181,62 @@ class TestMultiplexPickerParameters:
         assert params.minimum_plexity == 5
         assert params.target_plexity == 15
         assert params.maximum_plexity == 25
+
+
+class TestBlastParameters:
+    """Tests for BlastParameters model."""
+
+    def test_default_values(self):
+        """Test that default values match the previously hardcoded values."""
+        params = BlastParameters()
+        assert params.length_threshold == 15
+        assert params.evalue_threshold == 10.0
+        assert params.max_mismatches == 2
+        assert params.max_amplicon_size == 2000
+        assert params.ontarget_tolerance == 5
+
+    def test_valid_custom_values(self):
+        """Test creating params with valid custom values."""
+        params = BlastParameters(
+            length_threshold=20,
+            evalue_threshold=5.0,
+            max_mismatches=1,
+            max_amplicon_size=5000,
+            ontarget_tolerance=10,
+        )
+        assert params.length_threshold == 20
+        assert params.max_amplicon_size == 5000
+
+    def test_length_threshold_bounds(self):
+        """Test that length_threshold outside [5, 30] raises ValidationError."""
+        with pytest.raises(ValidationError):
+            BlastParameters(length_threshold=3)
+        with pytest.raises(ValidationError):
+            BlastParameters(length_threshold=35)
+
+    def test_max_mismatches_bounds(self):
+        """Test that max_mismatches outside [0, 5] raises ValidationError."""
+        with pytest.raises(ValidationError):
+            BlastParameters(max_mismatches=-1)
+        with pytest.raises(ValidationError):
+            BlastParameters(max_mismatches=6)
+
+    def test_evalue_must_be_positive(self):
+        """Test that evalue_threshold <= 0 raises ValidationError."""
+        with pytest.raises(ValidationError):
+            BlastParameters(evalue_threshold=0.0)
+
+    def test_present_in_designer_config(self):
+        """Test that BlastParameters is accessible on DesignerConfig."""
+        config = DesignerConfig()
+        assert isinstance(config.blast_parameters, BlastParameters)
+        assert config.blast_parameters.length_threshold == 15
+
+    def test_loaded_from_preset(self):
+        """Test that blast_parameters loads from JSON preset files."""
+        config = DesignerConfig.from_preset("default")
+        assert config.blast_parameters.length_threshold == 15
+        assert config.blast_parameters.ontarget_tolerance == 5
 
 
 class TestDesignerConfig:

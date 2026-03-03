@@ -70,6 +70,13 @@
         "snp_strict": false,
         "snp_af_weight": 1.0
     },
+    "blast_parameters": {
+        "length_threshold": 15,
+        "evalue_threshold": 10.0,
+        "max_mismatches": 2,
+        "max_amplicon_size": 2000,
+        "ontarget_tolerance": 5
+    },
     "multiplex_picker_parameters": {
         "initial_solutions": 100,
         "top_solutions_to_keep": 4,

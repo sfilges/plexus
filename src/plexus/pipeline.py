@@ -523,11 +523,17 @@ def run_pipeline(
                 )
 
                 blast_dir = output_dir / "blast"
+                blast_config = config.blast_parameters
                 run_specificity_check(
                     panel,
                     str(blast_dir),
                     str(fasta_file),
                     num_threads=blast_num_threads,
+                    length_threshold=blast_config.length_threshold,
+                    evalue_threshold=blast_config.evalue_threshold,
+                    max_mismatches=blast_config.max_mismatches,
+                    max_amplicon_size=blast_config.max_amplicon_size,
+                    ontarget_tolerance=blast_config.ontarget_tolerance,
                 )
                 result.steps_completed.append("specificity_checked")
                 logger.info("Specificity check complete")
