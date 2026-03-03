@@ -282,6 +282,19 @@ class BlastParameters(BaseModel):
             "15+ bp 3' stretch will still extend in PCR."
         ),
     )
+    three_prime_tolerance: int = Field(
+        default=3,
+        ge=0,
+        le=5,
+        description=(
+            "Maximum number of unaligned bases at the 3' end of the primer for "
+            "a BLAST hit to still be considered '3'-anchored'. BLAST's local "
+            "alignment clips terminal mismatches, so a primer with mismatches "
+            "at or near the 3' end will have qend < qlen. A tolerance of 3 "
+            "catches these real binding events (e.g. DCAF12L1 paralogs) that "
+            "Primer-BLAST detects via its semi-global alignment."
+        ),
+    )
     blast_evalue: float = Field(
         default=30000.0,
         gt=0.0,

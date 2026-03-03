@@ -75,6 +75,7 @@
         "length_threshold": 15,
         "evalue_threshold": 10.0,
         "max_mismatches": 3,
+        "three_prime_tolerance": 3,
         "blast_evalue": 30000.0,
         "blast_word_size": 7,
         "blast_reward": 1,

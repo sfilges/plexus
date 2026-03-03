@@ -1,4 +1,5 @@
 import os
+import warnings
 
 import pandas as pd
 from loguru import logger
@@ -30,8 +31,7 @@ class BlastRunner:
         """
         Interface for running BLAST:
         - Creates BLAST database
-        - Runs BLAST in archive mode
-        - Reformats to a table
+        - Runs BLAST (direct tabular output or legacy archive mode)
         - Converts table to a pandas data frame
 
         params
@@ -92,7 +92,9 @@ class BlastRunner:
 
     def run(
         self,
-        output_archive,
+        output_archive=None,
+        *,
+        output_table=None,
         word_size=None,
         task="blastn-short",
         num_threads: int = 1,
@@ -103,16 +105,34 @@ class BlastRunner:
         dust: str | None = None,
     ):
         """
-        Run blast, writing a BLAST archive to `output_archive`.
+        Run blastn and write results.
 
         Uses ``-task blastn-short`` by default, which is tuned for
         primer-length queries (<30 bp) with word_size=7, reward 1,
         penalty −3, and gap costs 5/2.
 
-        Note that we run with output format 11 ``-outfmt 11`` to
-        produce the archive; from this format you can convert to
-        all other formats.
+        Parameters
+        ----------
+        output_table : str
+            Path for direct tabular output (``-outfmt 6``).  Preferred.
+        output_archive : str
+            *Deprecated.*  Path for a BLAST archive (``-outfmt 11``).
+            Use ``output_table`` instead to skip the archive/reformat step.
         """
+        if output_table is not None:
+            outfmt = f"6 {self.BLAST_COLS}"
+            out_path = output_table
+        elif output_archive is not None:
+            warnings.warn(
+                "output_archive is deprecated; use output_table for direct "
+                "tabular output and avoid the archive/reformat step.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            outfmt = "11"
+            out_path = output_archive
+        else:
+            raise ValueError("Either output_table or output_archive must be provided.")
 
         cmd = [
             "blastn",
@@ -123,9 +143,9 @@ class BlastRunner:
             "-task",
             task,
             "-outfmt",
-            "11",
+            outfmt,
             "-out",
-            output_archive,
+            out_path,
         ]
         if word_size is not None:
             cmd.extend(["-word_size", str(word_size)])
@@ -144,8 +164,10 @@ class BlastRunner:
 
         run_command(cmd, check=True, retries=2)
 
-        # Save as instance variable, for reformattings
-        self.output_archive = output_archive
+        if output_table is not None:
+            self.output_table = output_table
+        else:
+            self.output_archive = output_archive
 
         return self
 

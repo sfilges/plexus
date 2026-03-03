@@ -532,6 +532,7 @@ def run_pipeline(
                     length_threshold=blast_config.length_threshold,
                     evalue_threshold=blast_config.evalue_threshold,
                     max_mismatches=blast_config.max_mismatches,
+                    three_prime_tolerance=blast_config.three_prime_tolerance,
                     max_amplicon_size=blast_config.max_amplicon_size,
                     ontarget_tolerance=blast_config.ontarget_tolerance,
                     blast_evalue=blast_config.blast_evalue,

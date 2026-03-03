@@ -639,6 +639,7 @@ Add a `max_candidates_per_junction` parameter to `MultiplexPickerParameters` (de
 **File: `src/plexus/resources.py`**
 
 Add presets for:
+
 - `hg19` / `GRCh37` (legacy clinical datasets)
 - `mm39` (mouse, common model organism)
 - `GRCh38_no_alt` (analysis-set FASTA without alt contigs, preferred for clinical pipelines)
