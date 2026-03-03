@@ -19,7 +19,9 @@ class BlastResultsAnnotator:
         self.blast_df = blast_df
         self.target_map = target_map or {}
 
-    def build_annotation_dict(self, length_threshold=12, evalue_threshold=4):
+    def build_annotation_dict(
+        self, length_threshold=12, evalue_threshold=4, max_mismatches=2
+    ):
         """
         Build a dictionary specifying conditions for annotation
 
@@ -28,7 +30,7 @@ class BlastResultsAnnotator:
             "from_3prime": lambda row: row["qend"] == row["qlen"],
             "length_pass_3prime": lambda row: (
                 row["length"] >= length_threshold
-                and row["pident"] == 100
+                and row["mismatch"] <= max_mismatches
                 and row["from_3prime"]
             ),
             "evalue_pass_3prime": lambda row: (

@@ -3,7 +3,11 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
-from plexus.blast.specificity import _is_on_target, run_specificity_check
+from plexus.blast.specificity import (
+    _is_on_target,
+    filter_offtarget_pairs,
+    run_specificity_check,
+)
 from plexus.designer.multiplexpanel import MultiplexPanel
 
 
@@ -333,3 +337,106 @@ class TestIsOnTarget:
             "R_start": 201,
         }
         assert _is_on_target(prod, junction, pair) is True
+
+
+# ---------------------------------------------------------------------------
+# filter_offtarget_pairs
+# ---------------------------------------------------------------------------
+
+
+class TestFilterOfftargetPairs:
+    """Tests for filter_offtarget_pairs()."""
+
+    @staticmethod
+    def _make_pair(pair_id, off_targets=0):
+        p = MagicMock()
+        p.pair_id = pair_id
+        p.off_target_products = [{"dummy": i} for i in range(off_targets)]
+        return p
+
+    @staticmethod
+    def _make_junction(name, pairs):
+        j = MagicMock()
+        j.name = name
+        j.primer_pairs = list(pairs)
+        return j
+
+    def test_all_clean_no_removal(self):
+        """When no pairs have off-targets, nothing is removed."""
+        panel = MagicMock(spec=MultiplexPanel)
+        panel.junctions = [
+            self._make_junction("J1", [self._make_pair("P1"), self._make_pair("P2")]),
+        ]
+
+        removed, fallbacks = filter_offtarget_pairs(panel)
+
+        assert removed == 0
+        assert fallbacks == []
+        assert len(panel.junctions[0].primer_pairs) == 2
+
+    def test_mixed_dirty_removed(self):
+        """Dirty pairs are removed when clean alternatives exist."""
+        clean1 = self._make_pair("P1", off_targets=0)
+        clean2 = self._make_pair("P2", off_targets=0)
+        dirty = self._make_pair("P3", off_targets=2)
+
+        panel = MagicMock(spec=MultiplexPanel)
+        panel.junctions = [
+            self._make_junction("J1", [clean1, dirty, clean2]),
+        ]
+
+        removed, fallbacks = filter_offtarget_pairs(panel)
+
+        assert removed == 1
+        assert fallbacks == []
+        assert panel.junctions[0].primer_pairs == [clean1, clean2]
+
+    def test_all_dirty_fallback_keeps_least_affected(self):
+        """When all pairs have off-targets, the one with fewest is kept."""
+        worst = self._make_pair("P1", off_targets=5)
+        bad = self._make_pair("P2", off_targets=3)
+        least = self._make_pair("P3", off_targets=1)
+
+        panel = MagicMock(spec=MultiplexPanel)
+        panel.junctions = [
+            self._make_junction("J1", [worst, bad, least]),
+        ]
+
+        removed, fallbacks = filter_offtarget_pairs(panel)
+
+        assert removed == 2
+        assert fallbacks == ["J1"]
+        assert panel.junctions[0].primer_pairs == [least]
+
+    def test_empty_junction_no_crash(self):
+        """A junction with no primer pairs is skipped gracefully."""
+        panel = MagicMock(spec=MultiplexPanel)
+        panel.junctions = [self._make_junction("J1", [])]
+
+        removed, fallbacks = filter_offtarget_pairs(panel)
+
+        assert removed == 0
+        assert fallbacks == []
+
+    def test_multiple_junctions(self):
+        """Filter operates independently per junction."""
+        # J1: mixed — dirty removed
+        j1_clean = self._make_pair("J1_P1", off_targets=0)
+        j1_dirty = self._make_pair("J1_P2", off_targets=3)
+
+        # J2: all dirty — fallback
+        j2_bad = self._make_pair("J2_P1", off_targets=4)
+        j2_least = self._make_pair("J2_P2", off_targets=1)
+
+        panel = MagicMock(spec=MultiplexPanel)
+        panel.junctions = [
+            self._make_junction("J1", [j1_clean, j1_dirty]),
+            self._make_junction("J2", [j2_bad, j2_least]),
+        ]
+
+        removed, fallbacks = filter_offtarget_pairs(panel)
+
+        assert removed == 2  # 1 from J1, 1 from J2
+        assert fallbacks == ["J2"]
+        assert panel.junctions[0].primer_pairs == [j1_clean]
+        assert panel.junctions[1].primer_pairs == [j2_least]

@@ -74,9 +74,9 @@ def main() -> None:
                 # pysam uses 0-based half-open
                 seq = fasta.fetch(chrom, orig_start - 1, orig_end)
 
-                assert len(seq) == 2 * CONTIG_HALF + 1, (
-                    f"Expected {2 * CONTIG_HALF + 1}bp, got {len(seq)} for {chrom}"
-                )
+                assert (
+                    len(seq) == 2 * CONTIG_HALF + 1
+                ), f"Expected {2 * CONTIG_HALF + 1}bp, got {len(seq)} for {chrom}"
 
                 fh.write(f">{chrom}\n")
                 # Write in 80-char lines

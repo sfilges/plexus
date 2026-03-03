@@ -55,7 +55,9 @@ def run_specificity_check(
     # 4. Annotate Results
     target_map = getattr(panel, "primer_target_map", {})
     annotator = BlastResultsAnnotator(blast_df, target_map=target_map)
-    annotator.build_annotation_dict(length_threshold=15, evalue_threshold=10)
+    annotator.build_annotation_dict(
+        length_threshold=15, evalue_threshold=10, max_mismatches=2
+    )
     annotator.add_annotations()
 
     # 5. Find Off-Target Amplicons
@@ -131,6 +133,62 @@ def run_specificity_check(
             )
 
     logger.info("Specificity check complete.")
+
+
+def filter_offtarget_pairs(panel: MultiplexPanel) -> tuple[int, list[str]]:
+    """Remove primer pairs that have off-target amplicons.
+
+    For each junction, pairs with no off-target products are kept.  If *all*
+    pairs for a junction have off-targets, the single pair with the fewest
+    off-target products is retained so the junction is not lost from the panel.
+
+    Parameters
+    ----------
+    panel : MultiplexPanel
+        Panel whose junctions have already been through ``run_specificity_check``.
+
+    Returns
+    -------
+    tuple[int, list[str]]
+        Total number of primer pairs removed across all junctions, and a list
+        of junction names where the fallback (all pairs had off-targets) was
+        triggered.
+    """
+    total_removed = 0
+    fallback_junctions: list[str] = []
+
+    for junction in panel.junctions:
+        if not junction.primer_pairs:
+            continue
+
+        clean = [p for p in junction.primer_pairs if len(p.off_target_products) == 0]
+        dirty = [p for p in junction.primer_pairs if len(p.off_target_products) > 0]
+
+        if not dirty:
+            continue
+
+        if clean:
+            removed = len(dirty)
+            junction.primer_pairs = clean
+            logger.info(
+                f"Junction {junction.name}: removed {removed} primer pair(s) "
+                f"with off-target products, {len(clean)} clean pair(s) remain"
+            )
+        else:
+            # All pairs have off-targets — keep the least affected one
+            best = min(junction.primer_pairs, key=lambda p: len(p.off_target_products))
+            removed = len(junction.primer_pairs) - 1
+            junction.primer_pairs = [best]
+            fallback_junctions.append(junction.name)
+            logger.warning(
+                f"Junction {junction.name}: all pairs have off-target products; "
+                f"keeping pair {best.pair_id} with fewest "
+                f"off-targets={len(best.off_target_products)}"
+            )
+
+        total_removed += removed
+
+    return total_removed, fallback_junctions
 
 
 def _is_on_target(prod: dict, junction, pair) -> bool:

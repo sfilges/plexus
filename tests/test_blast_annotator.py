@@ -50,8 +50,9 @@ def test_add_annotations(sample_blast_df):
     assert bool(df.iloc[1]["from_3prime"]) is False
     assert bool(df.iloc[1]["predicted_bound"]) is False
 
-    # Hit 2: Mismatching (pident=90)
-    assert bool(df.iloc[2]["length_pass_3prime"]) is False
+    # Hit 2: 3' match with 2 mismatches (pident=90, mismatch=2) — within tolerance
+    assert bool(df.iloc[2]["length_pass_3prime"]) is True
+    assert bool(df.iloc[2]["predicted_bound"]) is True
 
     # Hit 3: 5'-anchored partial match (qend=15, qlen=22): from_3prime must be False
     assert bool(df.iloc[3]["from_3prime"]) is False
@@ -125,3 +126,31 @@ def test_from_3prime_annotation_semantics():
     # Full-length: from_3prime=True, predicted_bound=True
     assert bool(df.iloc[2]["from_3prime"]) is True
     assert bool(df.iloc[2]["predicted_bound"]) is True
+
+
+def test_length_pass_rejects_high_mismatch():
+    """
+    A 3' hit with more mismatches than max_mismatches should fail
+    length_pass_3prime even if the alignment is long enough.
+    """
+    cols = "qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore sstrand qlen".split()
+    data = [
+        # 3' hit with 3 mismatches — should fail length_pass_3prime
+        ["SEQ_0", "chr1", 85.0, 20, 3, 0, 1, 20, 100, 119, 50.0, 15.0, "plus", 20],
+        # 3' hit with 2 mismatches — should pass length_pass_3prime
+        ["SEQ_1", "chr1", 90.0, 20, 2, 0, 1, 20, 200, 219, 50.0, 15.0, "plus", 20],
+    ]
+    df = pd.DataFrame(data, columns=cols)
+    annotator = BlastResultsAnnotator(df)
+    annotator.build_annotation_dict(
+        length_threshold=15, evalue_threshold=1.0, max_mismatches=2
+    )
+    annotator.add_annotations()
+
+    # 3 mismatches: from_3prime=True but length_pass_3prime=False
+    assert bool(df.iloc[0]["from_3prime"]) is True
+    assert bool(df.iloc[0]["length_pass_3prime"]) is False
+
+    # 2 mismatches: from_3prime=True and length_pass_3prime=True
+    assert bool(df.iloc[1]["from_3prime"]) is True
+    assert bool(df.iloc[1]["length_pass_3prime"]) is True

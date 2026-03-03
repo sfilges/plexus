@@ -517,7 +517,10 @@ def run_pipeline(
             )
 
             try:
-                from plexus.blast.specificity import run_specificity_check
+                from plexus.blast.specificity import (
+                    filter_offtarget_pairs,
+                    run_specificity_check,
+                )
 
                 blast_dir = output_dir / "blast"
                 run_specificity_check(
@@ -528,6 +531,19 @@ def run_pipeline(
                 )
                 result.steps_completed.append("specificity_checked")
                 logger.info("Specificity check complete")
+
+                n_removed, fallback_junctions = filter_offtarget_pairs(panel)
+                if n_removed > 0:
+                    logger.info(
+                        f"Off-target filter: removed {n_removed} primer pair(s) "
+                        "with off-target products"
+                    )
+                for name in fallback_junctions:
+                    result.errors.append(
+                        f"Off-target filter: '{name}' — no clean pairs; "
+                        "least-affected pair kept"
+                    )
+                result.steps_completed.append("offtarget_filtered")
             except ImportError as e:
                 logger.warning(f"BLAST module not available: {e}")
                 result.errors.append(f"BLAST not available: {e}")

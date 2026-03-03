@@ -9,6 +9,7 @@ __pycache__/
 *.DS_STORE
 .out/
 
+dalin_test/
 results*
 .claude/
 output*/
