@@ -20,14 +20,27 @@ class BlastResultsAnnotator:
         self.target_map = target_map or {}
 
     def build_annotation_dict(
-        self, length_threshold=12, evalue_threshold=4, max_mismatches=2
+        self,
+        length_threshold=12,
+        evalue_threshold=4,
+        max_mismatches=2,
+        three_prime_tolerance=0,
     ):
         """
-        Build a dictionary specifying conditions for annotation
+        Build a dictionary specifying conditions for annotation.
 
+        Parameters
+        ----------
+        three_prime_tolerance : int
+            Maximum number of unaligned bases at the 3' end of the primer
+            for a hit to still be considered "3'-anchored".  BLAST's local
+            alignment clips terminal mismatches, so a primer with a mismatch
+            at or near the 3' end will have ``qend < qlen``.  A tolerance
+            of 2-3 catches these cases without accepting 5'-only hits.
         """
         self.annotations = {
-            "from_3prime": lambda row: row["qend"] == row["qlen"],
+            "from_3prime": lambda row: (row["qlen"] - row["qend"])
+            <= three_prime_tolerance,
             "length_pass_3prime": lambda row: (
                 row["length"] >= length_threshold
                 and row["mismatch"] <= max_mismatches

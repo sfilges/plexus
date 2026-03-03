@@ -191,7 +191,13 @@ class TestBlastParameters:
         params = BlastParameters()
         assert params.length_threshold == 15
         assert params.evalue_threshold == 10.0
-        assert params.max_mismatches == 2
+        assert params.max_mismatches == 3
+        assert params.blast_evalue == 30000.0
+        assert params.blast_word_size == 7
+        assert params.blast_reward == 1
+        assert params.blast_penalty == -1
+        assert params.blast_max_hsps == 100
+        assert params.blast_dust == "yes"
         assert params.max_amplicon_size == 2000
         assert params.ontarget_tolerance == 5
 

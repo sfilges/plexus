@@ -154,3 +154,51 @@ def test_length_pass_rejects_high_mismatch():
     # 2 mismatches: from_3prime=True and length_pass_3prime=True
     assert bool(df.iloc[1]["from_3prime"]) is True
     assert bool(df.iloc[1]["length_pass_3prime"]) is True
+
+
+def test_three_prime_tolerance_catches_clipped_terminal_mismatches():
+    """
+    BLAST's local alignment clips terminal mismatches, so a primer with a
+    mismatch at or near the 3' end will have qend < qlen.  With
+    three_prime_tolerance > 0, these hits should be classified as from_3prime.
+
+    This is the DCAF12L1 scenario: a 21bp reverse primer aligns 19bp
+    (qend=19, qlen=21) because BLAST clips 2 terminal mismatched bases.
+    """
+    cols = "qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore sstrand qlen".split()
+    data = [
+        # Exact 3' match: qend == qlen
+        ["SEQ_0", "chr1", 100.0, 21, 0, 0, 1, 21, 100, 120, 0.4, 35.0, "minus", 21],
+        # 2bp clipped at 3' end: qend=19, qlen=21 (the DCAF12L1 hit)
+        ["SEQ_0", "chr1", 89.5, 19, 2, 0, 1, 19, 200, 218, 298.0, 25.4, "minus", 21],
+        # 5bp clipped at 3' end: qend=16, qlen=21 — too far from 3' end
+        ["SEQ_0", "chr1", 87.5, 16, 2, 0, 1, 16, 300, 315, 900.0, 22.0, "minus", 21],
+    ]
+    df = pd.DataFrame(data, columns=cols)
+
+    # tolerance=0 (old behaviour): only exact 3' match passes
+    annotator0 = BlastResultsAnnotator(df.copy())
+    annotator0.build_annotation_dict(
+        length_threshold=15,
+        evalue_threshold=10.0,
+        max_mismatches=3,
+        three_prime_tolerance=0,
+    )
+    annotator0.add_annotations()
+    assert bool(annotator0.blast_df.iloc[0]["from_3prime"]) is True
+    assert bool(annotator0.blast_df.iloc[1]["from_3prime"]) is False  # missed!
+    assert bool(annotator0.blast_df.iloc[2]["from_3prime"]) is False
+
+    # tolerance=3: the 2bp-clipped hit now passes
+    annotator3 = BlastResultsAnnotator(df.copy())
+    annotator3.build_annotation_dict(
+        length_threshold=15,
+        evalue_threshold=10.0,
+        max_mismatches=3,
+        three_prime_tolerance=3,
+    )
+    annotator3.add_annotations()
+    assert bool(annotator3.blast_df.iloc[0]["from_3prime"]) is True
+    assert bool(annotator3.blast_df.iloc[1]["from_3prime"]) is True  # now caught
+    assert bool(annotator3.blast_df.iloc[1]["predicted_bound"]) is True
+    assert bool(annotator3.blast_df.iloc[2]["from_3prime"]) is False  # still too far

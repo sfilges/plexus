@@ -43,22 +43,14 @@ def mock_panel():
     return panel
 
 
-def test_blast_archive_removed_after_run(mock_panel, tmp_path):
-    """The BLAST archive file is cleaned up after a successful specificity check."""
-    blast_archive = tmp_path / "blast_archive"
-
+def test_direct_tabular_no_archive(mock_panel, tmp_path):
+    """Specificity check uses output_table directly, no archive file is created."""
     with (
         patch("plexus.blast.specificity.BlastRunner") as MockRunner,
         patch("plexus.blast.specificity.BlastResultsAnnotator") as MockAnnotator,
         patch("plexus.blast.specificity.AmpliconFinder") as MockFinder,
     ):
         runner_instance = MockRunner.return_value
-
-        def fake_run(output_archive, **kwargs):
-            # Simulate BLAST creating the archive file
-            open(output_archive, "w").close()
-
-        runner_instance.run.side_effect = fake_run
         runner_instance.get_dataframe.return_value = pd.DataFrame({"dummy": [1]})
 
         annotator_instance = MockAnnotator.return_value
@@ -71,7 +63,14 @@ def test_blast_archive_removed_after_run(mock_panel, tmp_path):
 
         run_specificity_check(mock_panel, str(tmp_path), "fake_genome.fa")
 
-        assert not blast_archive.exists(), "BLAST archive should be removed after run"
+        # Verify output_table= was used (not output_archive)
+        _, run_kwargs = runner_instance.run.call_args
+        assert "output_table" in run_kwargs
+        assert run_kwargs["output_table"].endswith("blast_table.txt")
+        # output_archive should NOT appear in the call
+        assert run_kwargs.get("output_archive") is None
+        # reformat_output_as_table should never be called
+        runner_instance.reformat_output_as_table.assert_not_called()
 
 
 def test_run_specificity_check_integration(mock_panel, tmp_path):
@@ -149,6 +148,7 @@ def test_run_specificity_check_forwards_num_threads(mock_panel, tmp_path):
 
         _, kwargs = runner_instance.run.call_args
         assert kwargs.get("num_threads") == 6
+        assert "output_table" in kwargs
 
 
 def test_run_specificity_check_forwards_blast_parameters(mock_panel, tmp_path):
@@ -178,15 +178,35 @@ def test_run_specificity_check_forwards_blast_parameters(mock_panel, tmp_path):
             evalue_threshold=5.0,
             max_mismatches=1,
             max_amplicon_size=5000,
+            blast_evalue=500.0,
+            blast_word_size=11,
+            blast_reward=2,
+            blast_penalty=-3,
+            blast_max_hsps=50,
+            blast_dust="no",
         )
 
-        # Verify annotator received custom thresholds
+        # Verify annotator received custom thresholds (three_prime_tolerance
+        # uses default since not overridden in this call)
         annotator_instance.build_annotation_dict.assert_called_once_with(
-            length_threshold=20, evalue_threshold=5.0, max_mismatches=1
+            length_threshold=20,
+            evalue_threshold=5.0,
+            max_mismatches=1,
+            three_prime_tolerance=3,
         )
 
         # Verify finder received custom max amplicon size
         finder_instance.find_amplicons.assert_called_once_with(max_size_bp=5000)
+
+        # Verify blast parameters were forwarded to runner.run()
+        _, run_kwargs = runner_instance.run.call_args
+        assert run_kwargs.get("evalue") == 500.0
+        assert run_kwargs.get("word_size") == 11
+        assert run_kwargs.get("reward") == 2
+        assert run_kwargs.get("penalty") == -3
+        assert run_kwargs.get("max_hsps") == 50
+        assert run_kwargs.get("dust") == "no"
+        assert "output_table" in run_kwargs
 
 
 def test_run_specificity_check_no_hits(mock_panel, tmp_path):

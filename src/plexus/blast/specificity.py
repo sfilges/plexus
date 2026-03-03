@@ -16,9 +16,16 @@ def run_specificity_check(
     *,
     length_threshold: int = 15,
     evalue_threshold: float = 10.0,
-    max_mismatches: int = 2,
+    max_mismatches: int = 3,
+    three_prime_tolerance: int = 3,
     max_amplicon_size: int = 2000,
     ontarget_tolerance: int = 5,
+    blast_evalue: float = 30000.0,
+    blast_word_size: int = 7,
+    blast_reward: int = 1,
+    blast_penalty: int = -1,
+    blast_max_hsps: int = 100,
+    blast_dust: str = "yes",
 ):
     """
     Run BLAST on all candidate primers in the panel to check for specificity
@@ -34,8 +41,14 @@ def run_specificity_check(
         length_threshold: Minimum 3'-anchored alignment length (bp) to predict binding.
         evalue_threshold: E-value cutoff for predicted binding.
         max_mismatches: Maximum mismatches in a 3'-anchored alignment.
+        three_prime_tolerance: Max unaligned bases at the 3' end for a hit to be
+            considered 3'-anchored.  Compensates for BLAST clipping terminal mismatches.
         max_amplicon_size: Maximum amplicon size (bp) to consider.
         ontarget_tolerance: Coordinate tolerance (bp) for on-target classification.
+        blast_evalue: E-value passed to blastn via -evalue to control search sensitivity.
+        blast_word_size: Word size passed to blastn via -word_size.
+        blast_reward: Match reward passed to blastn via -reward.
+        blast_penalty: Mismatch penalty passed to blastn via -penalty.
     """
     logger.info("Starting specificity check (BLAST)...")
     os.makedirs(work_dir, exist_ok=True)
@@ -53,19 +66,20 @@ def run_specificity_check(
     panel.save_candidate_primers_to_fasta(input_fasta)
 
     # 3. Run BLAST
-    blast_archive = os.path.join(work_dir, "blast_archive")
     blast_table = os.path.join(work_dir, "blast_table.txt")
 
     runner = BlastRunner(input_fasta, genome_fasta)
     runner.create_database()
-    try:
-        runner.run(output_archive=blast_archive, num_threads=num_threads)
-        runner.reformat_output_as_table(blast_table)
-    finally:
-        if os.path.exists(blast_archive):
-            os.remove(blast_archive)
-            logger.debug(f"Removed BLAST archive: {blast_archive}")
-
+    runner.run(
+        output_table=blast_table,
+        num_threads=num_threads,
+        evalue=blast_evalue,
+        word_size=blast_word_size,
+        reward=blast_reward,
+        penalty=blast_penalty,
+        max_hsps=blast_max_hsps,
+        dust=blast_dust,
+    )
     blast_df = runner.get_dataframe()
 
     if blast_df.empty:
@@ -79,6 +93,7 @@ def run_specificity_check(
         length_threshold=length_threshold,
         evalue_threshold=evalue_threshold,
         max_mismatches=max_mismatches,
+        three_prime_tolerance=three_prime_tolerance,
     )
     annotator.add_annotations()
 

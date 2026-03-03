@@ -64,6 +64,7 @@ def design_multiplex_primers(panel: MultiplexPanel) -> MultiplexPanel:
     min_primer_length = singleplex.primer_min_length
     max_primer_length = singleplex.primer_max_length
     max_poly_X = singleplex.primer_max_poly_x
+    max_poly_gc = singleplex.primer_max_poly_gc
     max_N = singleplex.primer_max_n
     min_gc = singleplex.primer_min_gc
     max_gc = singleplex.primer_max_gc
@@ -135,6 +136,7 @@ def design_multiplex_primers(panel: MultiplexPanel) -> MultiplexPanel:
                     min_gc=min_gc,
                     max_gc=max_gc,
                     gc_clamp=gc_clamp,
+                    max_poly_gc=max_poly_gc,
                 )
                 if orientation == "forward":
                     left_kmers = kmers
