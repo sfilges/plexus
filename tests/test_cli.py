@@ -184,7 +184,48 @@ class TestRunCommand:
 
     @patch("plexus.orchestrator.run_pipeline")
     def test_run_with_warnings(self, mock_run_pipeline):
-        """Test run that completes with warnings."""
+        """Test run that completes with warnings (not errors)."""
+        mock_panel = MagicMock()
+        mock_panel.junctions = [MagicMock()]
+        mock_panel.junctions[0].primer_pairs = []
+
+        mock_result = PipelineResult(
+            panel=mock_panel,
+            output_dir=Path("/tmp/output"),
+            config=MagicMock(),
+            steps_completed=["panel_created", "primers_designed"],
+            warnings=[
+                "Off-target filter: 'KRAS' — no clean pairs; all least-affected pairs kept"
+            ],
+        )
+        mock_run_pipeline.return_value = mock_result
+
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as csv_f:
+            csv_path = csv_f.name
+            csv_f.write(b"Name,Chrom,Position\n")
+
+        with tempfile.NamedTemporaryFile(suffix=".fa", delete=False) as fa_f:
+            fasta_path = fa_f.name
+            fa_f.write(b">chr1\nACGT\n")
+
+        try:
+            result = runner.invoke(
+                app,
+                ["run", "--input", csv_path, "--fasta", fasta_path],
+            )
+
+            assert result.exit_code == 0
+            # Should show success (no errors) plus warnings section
+            assert "successfully" in result.output.lower()
+            assert "warnings" in result.output.lower()
+            assert "Off-target filter" in result.output
+        finally:
+            Path(csv_path).unlink()
+            Path(fasta_path).unlink()
+
+    @patch("plexus.orchestrator.run_pipeline")
+    def test_run_with_errors(self, mock_run_pipeline):
+        """Test run that completes with errors."""
         mock_panel = MagicMock()
         mock_panel.junctions = [MagicMock()]
         mock_panel.junctions[0].primer_pairs = []
@@ -213,7 +254,7 @@ class TestRunCommand:
             )
 
             assert result.exit_code == 0
-            assert "warnings" in result.output.lower()
+            assert "errors" in result.output.lower()
             assert "Save candidates failed" in result.output
         finally:
             Path(csv_path).unlink()

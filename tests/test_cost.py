@@ -44,6 +44,51 @@ def _make_config(**kwargs):
     return MultiplexPickerParameters(**defaults)
 
 
+class TestCrossDimerNormalisation:
+    def test_cross_dimer_normalised_by_interaction_count(self):
+        """Cross-dimer penalty is divided by C(2n, 2) so it's a per-interaction average."""
+        # 2 pairs → 4 primers → C(4,2) = 6 interactions
+        p1 = _make_pair(pair_penalty=0.0, pair_id="p1")
+        # Use a distinct sequence for p2 so dimer scores are computed
+        p2_fwd = _make_primer("fwd2", "forward", seq="GCGCGCGCGCGCGCGCGCGC")
+        p2_rev = _make_primer("rev2", "reverse", seq="ATATATATATATATATATATAT")
+        p2 = PrimerPair(
+            forward=p2_fwd,
+            reverse=p2_rev,
+            insert_size=20,
+            amplicon_sequence="A" * 60,
+            amplicon_length=60,
+            pair_penalty=0.0,
+            pair_id="p2",
+        )
+        p2.snp_penalty = 0.0
+
+        config = _make_config(
+            wt_pair_penalty=0.0,
+            wt_cross_dimer=1.0,
+        )
+        cf = MultiplexCostFunction({"p1": p1, "p2": p2}, config)
+
+        # Get the raw dimer penalty for comparison
+        raw = cf._calc_cross_dimer_penalty([p1, p2])
+        cost = cf.calc_cost(["p1", "p2"])
+
+        # 4 primers → 6 interactions; cost should be raw / 6
+        n_interactions = 6
+        assert cost == pytest.approx(raw / n_interactions)
+
+    def test_single_pair_normalises_to_one_interaction(self):
+        """With 1 pair (2 primers), there's C(2,2)=1 interaction."""
+        p1 = _make_pair(pair_penalty=0.0, pair_id="p1")
+        config = _make_config(wt_pair_penalty=0.0, wt_cross_dimer=1.0)
+        cf = MultiplexCostFunction({"p1": p1}, config)
+
+        raw = cf._calc_cross_dimer_penalty([p1])
+        cost = cf.calc_cost(["p1"])
+        # 2 primers → C(2,2) = 1 interaction; cost = raw / 1
+        assert cost == pytest.approx(raw / 1)
+
+
 class TestSnpPenaltyCostTerm:
     def test_snp_penalty_used_independently(self):
         """wt_snp_penalty scales pair.snp_penalty as a separate cost term."""

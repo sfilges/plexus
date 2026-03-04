@@ -7,10 +7,27 @@ from datetime import datetime
 
 from loguru import logger
 
+
+class _ConsoleFilter:
+    """Togglable filter for the stderr log handler.
+
+    When disabled, INFO messages are suppressed on the console while
+    Rich progress bars are active.  File logging is unaffected.
+    """
+
+    def __init__(self):
+        self.enabled = True
+
+    def __call__(self, record):
+        return self.enabled
+
+
+_console_filter = _ConsoleFilter()
+
 # Remove default handler
 logger.remove()
 
-# Add console handler with colored output
+# Add console handler with colored output (filtered via _console_filter)
 logger.add(
     sys.stderr,
     format=(
@@ -19,7 +36,18 @@ logger.add(
     ),
     level="INFO",
     colorize=True,
+    filter=_console_filter,
 )
+
+
+def suppress_console_logging():
+    """Disable the stderr log handler (used while progress bars are active)."""
+    _console_filter.enabled = False
+
+
+def restore_console_logging():
+    """Re-enable the stderr log handler."""
+    _console_filter.enabled = True
 
 
 def configure_file_logging(log_dir: str = ".", debug: bool = False) -> str:
@@ -50,4 +78,9 @@ def configure_file_logging(log_dir: str = ".", debug: bool = False) -> str:
 
 
 # Re-export logger for convenient imports
-__all__ = ["logger", "configure_file_logging"]
+__all__ = [
+    "logger",
+    "configure_file_logging",
+    "suppress_console_logging",
+    "restore_console_logging",
+]

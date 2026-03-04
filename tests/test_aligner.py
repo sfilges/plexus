@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from importlib.resources import as_file, files
+
 import pytest
 
 from plexus.aligner.align import (
@@ -9,14 +11,12 @@ from plexus.aligner.align import (
     PrimerDimerPredictor,
     create_nn_score_dt,
 )
-from plexus.utils.root_dir import ROOT_DIR
 
 # ---------------------------------------------------------------------------
 # Shared paths (resolved once at module level)
 # ---------------------------------------------------------------------------
 
-_MATCH_JSON = f"{ROOT_DIR}/config/nn_model/match.json"
-_SINGLE_MM_JSON = f"{ROOT_DIR}/config/nn_model/single_mismatch.json"
+_DATA_PKG = files("plexus.data")
 _DOUBLE_MM_SCORE = 0.2
 
 # All 16 Watson-Crick dinucleotide pairs present in match.json
@@ -50,11 +50,15 @@ class TestCreateNnScoreDict:
 
     @pytest.fixture(scope="class")
     def nn_scores(self) -> dict[str, float]:
-        return create_nn_score_dt(
-            match_json=_MATCH_JSON,
-            single_mismatch_json=_SINGLE_MM_JSON,
-            double_mismatch_score=_DOUBLE_MM_SCORE,
-        )
+        with (
+            as_file(_DATA_PKG / "nn_model" / "match.json") as match_path,
+            as_file(_DATA_PKG / "nn_model" / "single_mismatch.json") as mm_path,
+        ):
+            return create_nn_score_dt(
+                match_json=str(match_path),
+                single_mismatch_json=str(mm_path),
+                double_mismatch_score=_DOUBLE_MM_SCORE,
+            )
 
     def test_all_16_match_pairs_present(self, nn_scores):
         """All 16 Watson-Crick dinucleotide pairs appear as keys."""

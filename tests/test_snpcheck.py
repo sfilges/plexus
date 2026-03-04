@@ -688,6 +688,24 @@ class TestFilterSnpPairs:
         assert len(panel.junctions[0].primer_pairs) == 1
         assert panel.junctions[0].primer_pairs[0].pair_id == "pair_b"
 
+    def test_keeps_all_tied_least_affected_when_all_dirty(self):
+        """When all pairs have SNPs, keep ALL with the lowest snp_count."""
+        pair_a = _make_pair(pair_id="pair_a", snp_count=1)
+        pair_b = _make_pair(pair_id="pair_b", snp_count=3)
+        pair_c = _make_pair(pair_id="pair_c", snp_count=1)
+        junction = _make_junction()
+        junction.name = "J_TIED"
+        junction.primer_pairs = [pair_a, pair_b, pair_c]
+        panel = _make_panel([junction])
+
+        removed, fallback = filter_snp_pairs(panel)
+
+        assert removed == 1
+        assert fallback == ["J_TIED"]
+        assert len(panel.junctions[0].primer_pairs) == 2
+        ids = {p.pair_id for p in panel.junctions[0].primer_pairs}
+        assert ids == {"pair_a", "pair_c"}
+
     def test_no_pairs_skipped(self):
         """Junction with no primer pairs -> no error, zero removed."""
         junction = _make_junction()
@@ -709,7 +727,7 @@ class TestFilterSnpPairs:
             _make_pair(pair_id="j1_dirty1", snp_count=1),
             _make_pair(pair_id="j1_dirty2", snp_count=3),
         ]
-        # Junction 2: all dirty (3 pairs) -> 2 removed (keep best)
+        # Junction 2: all dirty (3 pairs, no ties) -> 2 removed (keep best)
         j2 = _make_junction()
         j2.name = "J2"
         j2.primer_pairs = [

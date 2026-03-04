@@ -1,7 +1,0 @@
-{
-    "end_length": 4,
-    "end_bonus": -0.5,
-    "match_scores": "config/nn_model/match.json",
-    "single_mismatch_scores": "config/nn_model/single_mismatch.json",
-    "double_mismatch_score": 0.2
-}

@@ -235,8 +235,8 @@ Configuration is managed via Pydantic models in `src/plexus/config.py`. The top-
 
 Two built-in presets are bundled as JSON:
 
-* `default` (`config/designer_default_config.json`) — conservative thermodynamic thresholds
-* `lenient` (`config/designer_lenient_config.json`) — relaxed thresholds for difficult junctions
+* `default` (`src/plexus/data/designer_default_config.json`) — conservative thermodynamic thresholds
+* `lenient` (`src/plexus/data/designer_lenient_config.json`) — relaxed thresholds for difficult junctions
 
 Users can supply a custom JSON with `--config` / `-c`. Generate a template with
 `plexus template`.

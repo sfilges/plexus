@@ -346,45 +346,58 @@ def run(
             debug=debug,
             fasta_sha256=fasta_sha256,
             snp_vcf_sha256=snp_vcf_sha256,
+            show_progress=True,
         )
 
         if isinstance(result, MultiPanelResult):
+            console.print()
             if result.success:
-                console.print()
                 console.print(
                     "[bold green]All panels completed successfully![/bold green]"
                 )
-                console.print(f"  Panels:         {len(result.panel_ids)}")
-                for pid in result.panel_ids:
-                    pr = result.panel_results[pid]
-                    console.print(
-                        f"    {pid}: {pr.num_junctions} junctions, "
-                        f"{len(pr.selected_pairs)} selected pairs"
-                    )
-                console.print(f"  Output:         {result.output_dir}")
             else:
-                console.print()
-                console.print("[bold yellow]Some panels had errors:[/bold yellow]")
+                console.print("[bold red]Some panels had errors:[/bold red]")
                 for pid in result.failed_panels:
                     pr = result.panel_results[pid]
                     for error in pr.errors:
-                        console.print(f"  [yellow]• {pid}: {error}[/yellow]")
-        else:
-            if result.success:
+                        console.print(f"  [red]• {pid}: {error}[/red]")
+
+            console.print(f"  Panels:         {len(result.panel_ids)}")
+            for pid in result.panel_ids:
+                pr = result.panel_results[pid]
+                console.print(
+                    f"    {pid}: {pr.num_junctions} junctions, "
+                    f"{len(pr.selected_pairs)} selected pairs"
+                )
+            console.print(f"  Output:         {result.output_dir}")
+
+            if result.warned_panels:
                 console.print()
+                console.print("[bold yellow]Some panels had warnings:[/bold yellow]")
+                for pid in result.warned_panels:
+                    pr = result.panel_results[pid]
+                    for warning in pr.warnings:
+                        console.print(f"  [yellow]• {pid}: {warning}[/yellow]")
+        else:
+            console.print()
+            if result.success:
                 console.print(
                     "[bold green]Pipeline completed successfully![/bold green]"
                 )
-                console.print(f"  Junctions:    {result.num_junctions}")
-                console.print(f"  Primer pairs: {result.num_primer_pairs}")
-                console.print(f"  Output:       {result.output_dir}")
             else:
-                console.print()
-                console.print(
-                    "[bold yellow]Pipeline completed with warnings:[/bold yellow]"
-                )
+                console.print("[bold red]Pipeline completed with errors:[/bold red]")
                 for error in result.errors:
-                    console.print(f"  [yellow]• {error}[/yellow]")
+                    console.print(f"  [red]• {error}[/red]")
+
+            console.print(f"  Junctions:    {result.num_junctions}")
+            console.print(f"  Primer pairs: {result.num_primer_pairs}")
+            console.print(f"  Output:       {result.output_dir}")
+
+            if result.warnings:
+                console.print()
+                console.print("[bold yellow]Warnings:[/bold yellow]")
+                for warning in result.warnings:
+                    console.print(f"  [yellow]• {warning}[/yellow]")
 
     except FileNotFoundError as e:
         console.print(f"[bold red]Error: {e}[/bold red]")

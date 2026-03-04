@@ -117,7 +117,7 @@ class TestDesignPrimersRouter:
         with patch("plexus.designer.design.design_multiplex_primers") as mock_dmp:
             mock_dmp.return_value = minimal_panel
             design_primers(minimal_panel, method="plexus")
-            mock_dmp.assert_called_once_with(minimal_panel)
+            mock_dmp.assert_called_once_with(minimal_panel, on_junction_done=None)
 
     def test_unknown_method_raises_value_error(self, minimal_panel):
         with pytest.raises(ValueError, match="Unknown design method"):

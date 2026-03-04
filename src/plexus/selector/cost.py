@@ -61,9 +61,12 @@ class MultiplexCostFunction:
             cost += self.wt_off_target * len(pair.off_target_products)
             cost += self.wt_pair_dimer * max(0, -(pair.dimer_score or 0.0))
 
-        # 2. All-pairwise cross-dimer interactions
+        # 2. All-pairwise cross-dimer interactions (normalised per interaction)
         if self.wt_cross_dimer > 0:
-            cost += self.wt_cross_dimer * self._calc_cross_dimer_penalty(pairs)
+            raw_dimer = self._calc_cross_dimer_penalty(pairs)
+            n_primers = len(pairs) * 2
+            n_interactions = n_primers * (n_primers - 1) / 2
+            cost += self.wt_cross_dimer * (raw_dimer / max(n_interactions, 1))
 
         return cost
 

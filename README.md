@@ -60,7 +60,7 @@ You can also set up the environment using Conda:
 ```bash
 git clone https://github.com/sfilges/plexus
 cd plexus
-conda env create -f config/environment.yml
+conda env create -f environment.yml
 conda activate plexus-run
 pip install -e .
 ```

@@ -229,6 +229,53 @@ def test_run_specificity_check_no_hits(mock_panel, tmp_path):
         assert pair.on_target_detected != True  # noqa: E712  — mock hasn't been set to True
 
 
+def test_run_specificity_check_swapped_orientation_off_target(mock_panel, tmp_path):
+    """Off-target where primers bind in swapped strand orientation is detected.
+
+    When the forward primer hits the minus strand and the reverse primer hits
+    the plus strand at an off-target locus, the AmpliconFinder stores the
+    amplicon under (R_id, F_id).  The mapping step must also check (r_id, f_id)
+    to catch these swapped-orientation off-targets.
+    """
+    with (
+        patch("plexus.blast.specificity.BlastRunner") as MockRunner,
+        patch("plexus.blast.specificity.BlastResultsAnnotator") as MockAnnotator,
+        patch("plexus.blast.specificity.AmpliconFinder") as MockFinder,
+        patch("os.makedirs"),
+    ):
+        runner_instance = MockRunner.return_value
+        runner_instance.get_dataframe.return_value = pd.DataFrame({"dummy": [1]})
+
+        annotator_instance = MockAnnotator.return_value
+        annotator_instance.get_predicted_bound.return_value = pd.DataFrame(
+            {"dummy_bound": [1]}
+        )
+
+        # Swapped orientation: reverse primer on plus strand (F_primer),
+        # forward primer on minus strand (R_primer).
+        finder_instance = MockFinder.return_value
+        finder_instance.amplicon_df = pd.DataFrame(
+            [
+                {
+                    "chrom": "chr12",
+                    "F_primer": "P1_R",  # reverse primer hit plus strand
+                    "R_primer": "P1_F",  # forward primer hit minus strand
+                    "product_bp": 64,
+                    "F_start": 52731859,
+                    "R_start": 52731922,
+                }
+            ]
+        )
+
+        run_specificity_check(mock_panel, str(tmp_path), "fake_genome.fa")
+
+        pair = mock_panel.junctions[0].primer_pairs[0]
+        assert pair.specificity_checked is True
+        assert len(pair.off_target_products) == 1
+        assert pair.off_target_products[0]["F_start"] == 52731859
+        assert pair.on_target_detected is False
+
+
 def test_run_specificity_check_on_target_detected(mock_panel, tmp_path):
     """When the amplicon is at the correct coordinates, on_target_detected is True."""
     with (
@@ -513,6 +560,23 @@ class TestFilterOfftargetPairs:
         assert fallbacks == ["J1"]
         assert panel.junctions[0].primer_pairs == [least]
 
+    def test_all_dirty_fallback_keeps_all_tied(self):
+        """When all pairs have off-targets, ALL with fewest are kept."""
+        tied_a = self._make_pair("P1", off_targets=1)
+        worst = self._make_pair("P2", off_targets=5)
+        tied_b = self._make_pair("P3", off_targets=1)
+
+        panel = MagicMock(spec=MultiplexPanel)
+        panel.junctions = [
+            self._make_junction("J1", [tied_a, worst, tied_b]),
+        ]
+
+        removed, fallbacks = filter_offtarget_pairs(panel)
+
+        assert removed == 1
+        assert fallbacks == ["J1"]
+        assert panel.junctions[0].primer_pairs == [tied_a, tied_b]
+
     def test_empty_junction_no_crash(self):
         """A junction with no primer pairs is skipped gracefully."""
         panel = MagicMock(spec=MultiplexPanel)
@@ -541,7 +605,7 @@ class TestFilterOfftargetPairs:
 
         removed, fallbacks = filter_offtarget_pairs(panel)
 
-        assert removed == 2  # 1 from J1, 1 from J2
+        assert removed == 2  # 1 from J1, 1 from J2 (no ties in J2)
         assert fallbacks == ["J2"]
         assert panel.junctions[0].primer_pairs == [j1_clean]
         assert panel.junctions[1].primer_pairs == [j2_least]

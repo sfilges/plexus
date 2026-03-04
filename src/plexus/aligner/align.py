@@ -21,11 +21,11 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from importlib.resources import files
 from itertools import product
+from pathlib import Path
 
 from loguru import logger
-
-from plexus.utils.root_dir import ROOT_DIR
 
 # ================================================================================
 # Define an alignment between two primers
@@ -91,8 +91,9 @@ class PrimerDimerPredictor:
 
         # Load parameters
         if param_path is None:
-            param_path = f"{ROOT_DIR}/config/alignment_parameters.json"
-        self.load_parameters(param_path)
+            self._load_parameters_from_package()
+        else:
+            self._load_parameters_from_file(param_path)
 
     def set_primers(
         self, primer1: str, primer2: str, primer1_name: str, primer2_name: str
@@ -104,12 +105,46 @@ class PrimerDimerPredictor:
         self.primer2_name = primer2_name
         self.score = None
 
-    def load_parameters(self, param_path: str) -> None:
+    def _load_parameters_from_package(self) -> None:
+        """Load alignment parameters from the bundled plexus.data package."""
+        cache_key = "__package__"
+        if cache_key in PrimerDimerPredictor._param_cache:
+            logger.debug("Using cached alignment parameters from package data")
+            self.nn_scores, self.end_length, self.end_bonus = (
+                PrimerDimerPredictor._param_cache[cache_key]
+            )
+            return
+
+        logger.info("Loading alignment parameters from package data")
+        data_pkg = files("plexus.data")
+
+        params = json.loads(data_pkg.joinpath("alignment_parameters.json").read_text())
+
+        match_dt: dict[str, float] = json.loads(
+            data_pkg.joinpath(params["match_scores"]).read_text()
+        )
+        single_mismatch_dt: dict[str, float] = json.loads(
+            data_pkg.joinpath(params["single_mismatch_scores"]).read_text()
+        )
+
+        self.nn_scores = _build_nn_score_dt(
+            match_dt, single_mismatch_dt, params["double_mismatch_score"]
+        )
+        self.end_length = params["end_length"]
+        self.end_bonus = params["end_bonus"]
+
+        PrimerDimerPredictor._param_cache[cache_key] = (
+            self.nn_scores,
+            self.end_length,
+            self.end_bonus,
+        )
+
+    def _load_parameters_from_file(self, param_path: str) -> None:
         """
-        Load parameters necessary for Primer Dimer algorithm,
-        and set as attributes. Results are cached by path so that
-        repeated instantiations within the same process only read
-        the JSON files once.
+        Load parameters from a user-specified file path.
+
+        Results are cached by path so that repeated instantiations
+        within the same process only read the JSON files once.
 
         Parameters
         ----------
@@ -125,18 +160,16 @@ class PrimerDimerPredictor:
 
         logger.info(f"Loading alignment parameters from: {param_path}")
 
-        # Load parameter JSON
         with open(param_path) as f:
             params = json.load(f)
 
-        # Load nearest neighbour model, these should all be paths
+        param_dir = str(Path(param_path).parent)
         self.nn_scores = create_nn_score_dt(
-            match_json=f"{ROOT_DIR}/{params['match_scores']}",
-            single_mismatch_json=f"{ROOT_DIR}/{params['single_mismatch_scores']}",
+            match_json=f"{param_dir}/{params['match_scores']}",
+            single_mismatch_json=f"{param_dir}/{params['single_mismatch_scores']}",
             double_mismatch_score=params["double_mismatch_score"],
         )
 
-        # Load penalties
         self.end_length = params["end_length"]
         self.end_bonus = params["end_bonus"]
 
@@ -366,6 +399,23 @@ class PrimerDimerPredictor:
         )
 
 
+def _build_nn_score_dt(
+    match_dt: dict[str, float],
+    single_mismatch_dt: dict[str, float],
+    double_mismatch_score: float = 0.2,
+) -> dict[str, float]:
+    """Build the nearest-neighbour scoring dict from pre-loaded dicts."""
+    nts = ["A", "T", "C", "G"]
+    nn_score_dt: dict[str, float] = {
+        "".join(watson) + "/" + "".join(crick): double_mismatch_score
+        for watson in product(nts, repeat=2)
+        for crick in product(nts, repeat=2)
+    }
+    nn_score_dt.update(match_dt)
+    nn_score_dt.update(single_mismatch_dt)
+    return nn_score_dt
+
+
 def create_nn_score_dt(
     match_json: str, single_mismatch_json: str, double_mismatch_score: float = 0.2
 ) -> dict[str, float]:
@@ -386,22 +436,9 @@ def create_nn_score_dt(
     dict
         Dictionary mapping dinucleotide pairs to their scores
     """
-    # Load match and single mismatch .jsons
     with open(match_json) as f:
         match_dt: dict[str, float] = json.load(f)
     with open(single_mismatch_json) as f:
         single_mismatch_dt: dict[str, float] = json.load(f)
 
-    # Set all as double mismatches; then update
-    nts = ["A", "T", "C", "G"]
-    nn_score_dt: dict[str, float] = {
-        "".join(watson) + "/" + "".join(crick): double_mismatch_score
-        for watson in product(nts, repeat=2)
-        for crick in product(nts, repeat=2)
-    }
-
-    # Update
-    nn_score_dt.update(match_dt)
-    nn_score_dt.update(single_mismatch_dt)
-
-    return nn_score_dt
+    return _build_nn_score_dt(match_dt, single_mismatch_dt, double_mismatch_score)

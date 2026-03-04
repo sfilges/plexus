@@ -10,13 +10,12 @@
 from __future__ import annotations
 
 import json
+from importlib.resources import files
 from pathlib import Path
 from typing import Any, Literal
 
 from loguru import logger
 from pydantic import BaseModel, Field, model_validator
-
-from plexus.utils.root_dir import ROOT_DIR
 
 
 class SingleplexDesignParameters(BaseModel):
@@ -467,14 +466,17 @@ class DesignerConfig(BaseModel):
         ValueError
             If the preset name is not recognized.
         """
-        if preset == "default":
-            config_path = Path(ROOT_DIR) / "config" / "designer_default_config.json"
-        elif preset == "lenient":
-            config_path = Path(ROOT_DIR) / "config" / "designer_lenient_config.json"
-        else:
+        preset_files = {
+            "default": "designer_default_config.json",
+            "lenient": "designer_lenient_config.json",
+        }
+        if preset not in preset_files:
             raise ValueError(f"Unknown preset: {preset}. Use 'default' or 'lenient'.")
 
-        return cls.from_json_file(config_path)
+        data = json.loads(
+            files("plexus.data").joinpath(preset_files[preset]).read_text()
+        )
+        return cls.model_validate(data)
 
     def to_dict(self) -> dict[str, Any]:
         """

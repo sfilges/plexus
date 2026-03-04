@@ -108,7 +108,7 @@ uv pip install -e .
 
 ```bash
 # Create conda environment
-conda env create -f config/environment.yml
+conda env create -f environment.yml
 conda activate plexus-run
 
 # Install plexus
