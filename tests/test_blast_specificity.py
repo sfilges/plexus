@@ -513,6 +513,23 @@ class TestFilterOfftargetPairs:
         assert fallbacks == ["J1"]
         assert panel.junctions[0].primer_pairs == [least]
 
+    def test_all_dirty_fallback_keeps_all_tied(self):
+        """When all pairs have off-targets, ALL with fewest are kept."""
+        tied_a = self._make_pair("P1", off_targets=1)
+        worst = self._make_pair("P2", off_targets=5)
+        tied_b = self._make_pair("P3", off_targets=1)
+
+        panel = MagicMock(spec=MultiplexPanel)
+        panel.junctions = [
+            self._make_junction("J1", [tied_a, worst, tied_b]),
+        ]
+
+        removed, fallbacks = filter_offtarget_pairs(panel)
+
+        assert removed == 1
+        assert fallbacks == ["J1"]
+        assert panel.junctions[0].primer_pairs == [tied_a, tied_b]
+
     def test_empty_junction_no_crash(self):
         """A junction with no primer pairs is skipped gracefully."""
         panel = MagicMock(spec=MultiplexPanel)
@@ -541,7 +558,7 @@ class TestFilterOfftargetPairs:
 
         removed, fallbacks = filter_offtarget_pairs(panel)
 
-        assert removed == 2  # 1 from J1, 1 from J2
+        assert removed == 2  # 1 from J1, 1 from J2 (no ties in J2)
         assert fallbacks == ["J2"]
         assert panel.junctions[0].primer_pairs == [j1_clean]
         assert panel.junctions[1].primer_pairs == [j2_least]

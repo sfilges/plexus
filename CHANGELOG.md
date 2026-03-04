@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.2] - 2026-03-03
 
+### Changed
+
+- **SNP and off-target filters now retain all tied least-affected pairs** (`snpcheck/checker.py`, `blast/specificity.py`): When all primer pairs for a junction overlap SNPs or have off-target products, the filters now keep every pair tied at the minimum count instead of arbitrarily picking one. This lets the downstream selector evaluate tied candidates on other properties (Tm, GC%, pair penalty, etc.).
+
 ### Fixed
 
 - **Package data files not found in global installs**: Config presets and alignment parameter files were not included in the wheel because they lived outside the Python package at the project root (`config/`). Moved all data files (`designer_default_config.json`, `designer_lenient_config.json`, `alignment_parameters.json`, `nn_model/`) into `src/plexus/data/` and switched `config.py` and `aligner/align.py` from `ROOT_DIR` path concatenation to `importlib.resources.files()`. Removed the now-unused `utils/root_dir.py`. `uv tool install` and `pip install` now work correctly without an editable install.

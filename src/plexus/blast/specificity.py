@@ -212,15 +212,18 @@ def filter_offtarget_pairs(panel: MultiplexPanel) -> tuple[int, list[str]]:
                 f"with off-target products, {len(clean)} clean pair(s) remain"
             )
         else:
-            # All pairs have off-targets — keep the least affected one
-            best = min(junction.primer_pairs, key=lambda p: len(p.off_target_products))
-            removed = len(junction.primer_pairs) - 1
-            junction.primer_pairs = [best]
+            # All pairs have off-targets — keep all with the fewest
+            min_ot = min(len(p.off_target_products) for p in junction.primer_pairs)
+            best_pairs = [
+                p for p in junction.primer_pairs if len(p.off_target_products) == min_ot
+            ]
+            removed = len(junction.primer_pairs) - len(best_pairs)
+            junction.primer_pairs = best_pairs
             fallback_junctions.append(junction.name)
             logger.warning(
                 f"Junction {junction.name}: all pairs have off-target products; "
-                f"keeping pair {best.pair_id} with fewest "
-                f"off-targets={len(best.off_target_products)}"
+                f"keeping {len(best_pairs)} pair(s) with fewest "
+                f"off-targets={min_ot}"
             )
 
         total_removed += removed

@@ -274,14 +274,16 @@ def filter_snp_pairs(panel: MultiplexPanel) -> tuple[int, list[str]]:
                 f"overlapping SNPs, {len(clean)} clean pair(s) remain"
             )
         else:
-            # All pairs have SNPs — keep the least affected one
-            best = min(junction.primer_pairs, key=lambda p: p.snp_count)
-            removed = len(junction.primer_pairs) - 1
-            junction.primer_pairs = [best]
+            # All pairs have SNPs — keep all with the lowest snp_count
+            min_snps = min(p.snp_count for p in junction.primer_pairs)
+            best_pairs = [p for p in junction.primer_pairs if p.snp_count == min_snps]
+            removed = len(junction.primer_pairs) - len(best_pairs)
+            junction.primer_pairs = best_pairs
             fallback_junctions.append(junction.name)
             logger.warning(
                 f"Junction {junction.name}: all pairs overlap SNPs; "
-                f"keeping pair {best.pair_id} with lowest snp_count={best.snp_count}"
+                f"keeping {len(best_pairs)} pair(s) with lowest "
+                f"snp_count={min_snps}"
             )
 
         total_removed += removed
