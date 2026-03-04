@@ -991,6 +991,14 @@ class MultiplexPanel:
                         "OT_Product_Size": prod.get("product_bp", ""),
                         "OT_F_Start": prod.get("F_start", ""),
                         "OT_R_Start": prod.get("R_start", ""),
+                        "OT_F_Pident": prod.get("F_pident", ""),
+                        "OT_R_Pident": prod.get("R_pident", ""),
+                        "OT_F_Mismatch": prod.get("F_mismatch", ""),
+                        "OT_R_Mismatch": prod.get("R_mismatch", ""),
+                        "OT_F_Align_Len": prod.get("F_align_len", ""),
+                        "OT_R_Align_Len": prod.get("R_align_len", ""),
+                        "OT_F_Evalue": prod.get("F_evalue", ""),
+                        "OT_R_Evalue": prod.get("R_evalue", ""),
                     }
                 )
 
@@ -1007,6 +1015,14 @@ class MultiplexPanel:
                     "OT_Product_Size",
                     "OT_F_Start",
                     "OT_R_Start",
+                    "OT_F_Pident",
+                    "OT_R_Pident",
+                    "OT_F_Mismatch",
+                    "OT_R_Mismatch",
+                    "OT_F_Align_Len",
+                    "OT_R_Align_Len",
+                    "OT_F_Evalue",
+                    "OT_R_Evalue",
                 ]
             ).to_csv(file_path, index=False)
             return

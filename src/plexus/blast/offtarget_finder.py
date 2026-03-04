@@ -30,6 +30,14 @@ class AmpliconFinder:
         - F_start: 5' genomic position of the forward primer
         - R_start: 5' genomic position of the reverse primer (on minus strand)
         - product_bp: Predicted size of the amplicon in base pairs (inclusive)
+        - F_pident: Percent identity of the forward primer alignment
+        - R_pident: Percent identity of the reverse primer alignment
+        - F_mismatch: Number of mismatches in the forward primer alignment
+        - R_mismatch: Number of mismatches in the reverse primer alignment
+        - F_align_len: Alignment length of the forward primer (bp)
+        - R_align_len: Alignment length of the reverse primer (bp)
+        - F_evalue: E-value of the forward primer alignment
+        - R_evalue: E-value of the reverse primer alignment
     """
 
     def __init__(self, bound_df, target_map=None):
@@ -68,6 +76,14 @@ class AmpliconFinder:
                 "F_start",
                 "R_start",
                 "product_bp",
+                "F_pident",
+                "R_pident",
+                "F_mismatch",
+                "R_mismatch",
+                "F_align_len",
+                "R_align_len",
+                "F_evalue",
+                "R_evalue",
             ],
         )
 
@@ -101,6 +117,14 @@ class AmpliconFinder:
                             F_start=F_start,
                             R_start=row["sstart"],
                             product_bp=row["sstart"] - F_start + 1,
+                            F_pident=F_df.get("pident", None),
+                            R_pident=row.get("pident", None),
+                            F_mismatch=F_df.get("mismatch", None),
+                            R_mismatch=row.get("mismatch", None),
+                            F_align_len=F_df.get("length", None),
+                            R_align_len=row.get("length", None),
+                            F_evalue=F_df.get("evalue", None),
+                            R_evalue=row.get("evalue", None),
                         )
                         for _, row in R_df.iterrows()
                     ]
