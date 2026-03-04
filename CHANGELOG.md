@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Swapped-orientation off-targets missed** (`blast/specificity.py`): When a forward primer binds the minus strand and the reverse primer binds the plus strand at an off-target locus, the `AmpliconFinder` stores the amplicon under `(reverse_id, forward_id)`. The mapping step only checked `(forward_id, reverse_id)`, silently missing these swapped-orientation off-targets. Now checks both key orders.
 - **Package data files not found in global installs**: Config presets and alignment parameter files were not included in the wheel because they lived outside the Python package at the project root (`config/`). Moved all data files (`designer_default_config.json`, `designer_lenient_config.json`, `alignment_parameters.json`, `nn_model/`) into `src/plexus/data/` and switched `config.py` and `aligner/align.py` from `ROOT_DIR` path concatenation to `importlib.resources.files()`. Removed the now-unused `utils/root_dir.py`. `uv tool install` and `pip install` now work correctly without an editable install.
 
 ## [1.0.1] - 03-03-2026

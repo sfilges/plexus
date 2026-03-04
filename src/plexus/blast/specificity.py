@@ -139,6 +139,7 @@ def run_specificity_check(
             n_checked += 1
 
             potential_products = amplicon_map.get((f_id, r_id), [])
+            potential_products += amplicon_map.get((r_id, f_id), [])
 
             off_targets = []
             on_targets = []
