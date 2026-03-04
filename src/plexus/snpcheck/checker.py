@@ -133,6 +133,7 @@ def run_snp_check(
     snp_3prime_window: int = 5,
     snp_3prime_multiplier: float = 3.0,
     snp_af_weight: float = 0.0,
+    on_junction_done: callable | None = None,
 ) -> None:
     """Check all primer pairs in the panel for SNP overlaps using a local VCF.
 
@@ -160,6 +161,8 @@ def run_snp_check(
         Exponent for AF-based penalty scaling, normalised to af_threshold.
         0.0 = no AF scaling (default, backwards compatible).
         1.0 = linear scaling. 0.5 = sqrt scaling.
+    on_junction_done : callable | None
+        Optional callback invoked after each junction is processed.
     """
     import pysam
 
@@ -228,6 +231,9 @@ def run_snp_check(
                     f"Junction {junction.name}: {n_snp_pairs}/{n_pairs} pairs overlap SNPs "
                     f"({n_pairs - n_snp_pairs} clean pair(s) available)"
                 )
+
+            if on_junction_done:
+                on_junction_done()
 
     logger.info(
         f"SNP check complete: {total_snps} SNPs found across {primers_with_snps} primers"

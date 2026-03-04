@@ -346,6 +346,7 @@ def run(
             debug=debug,
             fasta_sha256=fasta_sha256,
             snp_vcf_sha256=snp_vcf_sha256,
+            show_progress=True,
         )
 
         if isinstance(result, MultiPanelResult):

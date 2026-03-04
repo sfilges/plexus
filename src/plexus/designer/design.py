@@ -2,6 +2,8 @@
 # Primer design module — "plexus" design algorithm
 # ================================================================================
 
+from __future__ import annotations
+
 import warnings
 
 from loguru import logger
@@ -20,19 +22,24 @@ from plexus.utils.utils import generate_kmers, reverse_complement
 # ================================================================================
 
 
-def design_primers(panel: MultiplexPanel, method: str = "plexus") -> MultiplexPanel:
+def design_primers(
+    panel: MultiplexPanel,
+    method: str = "plexus",
+    on_junction_done: callable | None = None,
+) -> MultiplexPanel:
     """
     Wrapper function to call the design algorithm.
 
     Args:
         panel: An instantiated MultiplexPanel object created with panel_factory.
         method: Design algorithm to use; defaults to "plexus".
+        on_junction_done: Optional callback invoked after each junction is processed.
 
     Returns:
         A MultiplexPanel object with primer designs.
     """
     if method == "plexus":
-        return design_multiplex_primers(panel)
+        return design_multiplex_primers(panel, on_junction_done=on_junction_done)
     raise ValueError(f"Unknown design method: {method}")
 
 
@@ -41,12 +48,16 @@ def design_primers(panel: MultiplexPanel, method: str = "plexus") -> MultiplexPa
 # ================================================================================
 
 
-def design_multiplex_primers(panel: MultiplexPanel) -> MultiplexPanel:
+def design_multiplex_primers(
+    panel: MultiplexPanel,
+    on_junction_done: callable | None = None,
+) -> MultiplexPanel:
     """
     A function that picks individual primers left and right of the provided junctions.
 
     Args:
         panel: A MultiplexPanel object with loaded junctions
+        on_junction_done: Optional callback invoked after each junction is processed.
 
     Returns:
         A MultiplexPanel object containing the left and right primer designs for each junction.
@@ -206,7 +217,9 @@ def design_multiplex_primers(panel: MultiplexPanel) -> MultiplexPanel:
             )
             junction.primer_pairs = []
             junction._design_error = str(e)
-            continue
+        finally:
+            if on_junction_done:
+                on_junction_done()
 
     # Separate failed junctions (no primer pairs)
     failed = [jn for jn in panel.junctions if not jn.primer_pairs]

@@ -5,17 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.2] - 2026-03-03
+## [1.0.2] - 04-03-2026
 
 ### Changed
 
+- **Rich progress bars replace log output during pipeline runs**: The CLI now shows clean Rich progress bars on stderr (step-level + per-junction detail for primer design and SNP check) instead of a wall of log messages. All detailed logs still go to the file. Warnings and errors are printed above the progress bar. Multi-panel parallel mode shows a panel-level progress bar. Progress bars are only active when stderr is a TTY; non-interactive runs behave as before.
 - **SNP and off-target filters now retain all tied least-affected pairs** (`snpcheck/checker.py`, `blast/specificity.py`): When all primer pairs for a junction overlap SNPs or have off-target products, the filters now keep every pair tied at the minimum count instead of arbitrarily picking one. This lets the downstream selector evaluate tied candidates on other properties (Tm, GC%, pair penalty, etc.).
 
 ### Fixed
 
 - **Package data files not found in global installs**: Config presets and alignment parameter files were not included in the wheel because they lived outside the Python package at the project root (`config/`). Moved all data files (`designer_default_config.json`, `designer_lenient_config.json`, `alignment_parameters.json`, `nn_model/`) into `src/plexus/data/` and switched `config.py` and `aligner/align.py` from `ROOT_DIR` path concatenation to `importlib.resources.files()`. Removed the now-unused `utils/root_dir.py`. `uv tool install` and `pip install` now work correctly without an editable install.
 
-## [1.0.1] - 2026-03-03
+## [1.0.1] - 03-03-2026
 
 ### Changed
 
@@ -36,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **3'-end tolerance for BLAST annotation** (`annotator.py`, `config.py`, `specificity.py`, `pipeline.py`): New `three_prime_tolerance` parameter (default 3) relaxes the `from_3prime` check from `qend == qlen` to `qlen - qend <= tolerance`. BLAST's local alignment clips terminal mismatches, causing hits like the DCAF12L1 reverse primer (19/21bp aligned, 2bp clipped at 3' end) to be wrongly discarded as "not 3'-anchored" even though Primer-BLAST detects them via semi-global alignment.
 - Tests for `find_max_poly_gc`, `check_kmer` poly-GC integration, BLAST evalue/reward/penalty/word_size parameter forwarding, and specificity check threading.
 
-## [1.0.0] - 2026-03-03
+## [1.0.0] - 03-03-2026
 
 First stable release. All v1.0 roadmap items complete — see `docs/ROADMAP.md` for the full list.
 Includes correctness fixes (BLAST annotation, coordinate handling, off-target filtering),

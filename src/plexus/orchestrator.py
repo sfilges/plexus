@@ -12,12 +12,21 @@ from __future__ import annotations
 
 import json
 import shutil
+import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 from loguru import logger
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
 
 from plexus.pipeline import MultiPanelResult, PipelineResult, run_pipeline
 
@@ -125,6 +134,7 @@ def run_multi_panel(
     output_dir: str | Path = "./output",
     parallel: bool = False,
     max_workers: int | None = None,
+    show_progress: bool = False,
     **pipeline_kwargs: Any,
 ) -> MultiPanelResult | PipelineResult:
     """
@@ -171,6 +181,7 @@ def run_multi_panel(
             input_file=input_file,
             fasta_file=fasta_file,
             output_dir=output_dir,
+            show_progress=show_progress,
             **pipeline_kwargs,
         )
 
@@ -192,11 +203,17 @@ def run_multi_panel(
         if parallel:
             workers = max_workers or len(panels)
             logger.info(f"Running {len(panels)} panels in parallel (workers={workers})")
+
+            # Panel-level progress bar for parallel mode (no per-step bars
+            # because subprocesses would fight over stderr).
+            _use_panel_bar = show_progress and sys.stderr.isatty()
+
             with ProcessPoolExecutor(max_workers=workers) as executor:
                 futures = {}
                 for panel_id, csv_path in panel_csvs.items():
                     kw = dict(pipeline_kwargs)
                     kw["panel_name"] = panel_id
+                    # Do NOT forward show_progress to child processes
                     future = executor.submit(
                         _run_single_panel,
                         panel_id=panel_id,
@@ -207,11 +224,28 @@ def run_multi_panel(
                     )
                     futures[future] = panel_id
 
-                for future in as_completed(futures):
-                    pid = futures[future]
-                    _, result = future.result()
-                    results[pid] = result
-                    logger.info(f"Panel '{pid}' completed.")
+                if _use_panel_bar:
+                    progress = Progress(
+                        SpinnerColumn(),
+                        TextColumn("[bold blue]{task.description}"),
+                        BarColumn(),
+                        MofNCompleteColumn(),
+                        TimeElapsedColumn(),
+                    )
+                    task = progress.add_task("Running panels", total=len(panels))
+                    with progress:
+                        for future in as_completed(futures):
+                            pid = futures[future]
+                            _, result = future.result()
+                            results[pid] = result
+                            logger.info(f"Panel '{pid}' completed.")
+                            progress.advance(task)
+                else:
+                    for future in as_completed(futures):
+                        pid = futures[future]
+                        _, result = future.result()
+                        results[pid] = result
+                        logger.info(f"Panel '{pid}' completed.")
         else:
             logger.info(f"Running {len(panels)} panels sequentially.")
             for panel_id, csv_path in panel_csvs.items():
@@ -222,6 +256,7 @@ def run_multi_panel(
                     panel_csv=csv_path,
                     fasta_file=fasta_file,
                     output_dir=output_dir,
+                    show_progress=show_progress,
                     **kw,
                 )
                 results[panel_id] = result
