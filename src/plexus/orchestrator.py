@@ -13,21 +13,23 @@ from __future__ import annotations
 import json
 import shutil
 import sys
+import threading
+import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from multiprocessing import Manager
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 from loguru import logger
 from rich.progress import (
-    BarColumn,
-    MofNCompleteColumn,
     Progress,
     SpinnerColumn,
     TextColumn,
     TimeElapsedColumn,
 )
 
+from plexus.logging import restore_console_logging, suppress_console_logging
 from plexus.pipeline import MultiPanelResult, PipelineResult, run_pipeline
 
 DEFAULT_PANEL_ID = "default"
@@ -100,6 +102,7 @@ def _run_single_panel(
     panel_csv: Path,
     fasta_file: Path,
     output_dir: Path,
+    _status_dict=None,
     **pipeline_kwargs: Any,
 ) -> tuple[str, PipelineResult]:
     """
@@ -107,6 +110,12 @@ def _run_single_panel(
 
     This is a top-level function (not a method or lambda) so it can be
     pickled by ProcessPoolExecutor.
+
+    Parameters
+    ----------
+    _status_dict : dict-like or None
+        Shared multiprocessing dict for reporting step progress back to
+        the parent process.  Keyed by panel_id.
 
     Returns
     -------
@@ -116,6 +125,20 @@ def _run_single_panel(
     panel_output_dir = output_dir / panel_id
     panel_name = pipeline_kwargs.pop("panel_name", panel_id)
 
+    # Suppress child-process console logging early (before any logger calls)
+    # when the parent is showing a progress bar.
+    if pipeline_kwargs.get("quiet"):
+        suppress_console_logging()
+
+    # Build a step_callback that writes to the shared dict
+    step_callback = None
+    if _status_dict is not None:
+
+        def step_callback(label):
+            _status_dict[panel_id] = label
+
+        _status_dict[panel_id] = "Starting…"
+
     logger.info(f"Starting pipeline for panel '{panel_id}'...")
 
     result = run_pipeline(
@@ -123,8 +146,13 @@ def _run_single_panel(
         fasta_file=fasta_file,
         output_dir=panel_output_dir,
         panel_name=panel_name,
+        step_callback=step_callback,
         **pipeline_kwargs,
     )
+
+    if _status_dict is not None:
+        _status_dict[panel_id] = "Done"
+
     return panel_id, result
 
 
@@ -199,27 +227,38 @@ def run_multi_panel(
 
     results: dict[str, PipelineResult] = {}
 
+    # Panel-level progress bar for parallel mode (no per-step bars
+    # because subprocesses would fight over stderr).
+    _use_panel_bar = parallel and show_progress and sys.stderr.isatty()
+
+    # Suppress parent console logging early — before any parallel INFO
+    # messages — so only the progress bar and explicit console prints appear.
+    if _use_panel_bar:
+        suppress_console_logging()
+
     try:
         if parallel:
             workers = max_workers or len(panels)
             logger.info(f"Running {len(panels)} panels in parallel (workers={workers})")
 
-            # Panel-level progress bar for parallel mode (no per-step bars
-            # because subprocesses would fight over stderr).
-            _use_panel_bar = show_progress and sys.stderr.isatty()
+            # Shared dict for child processes to report current step
+            mgr = Manager() if _use_panel_bar else None
+            status_dict = mgr.dict() if mgr else None
 
             with ProcessPoolExecutor(max_workers=workers) as executor:
                 futures = {}
                 for panel_id, csv_path in panel_csvs.items():
                     kw = dict(pipeline_kwargs)
                     kw["panel_name"] = panel_id
-                    # Do NOT forward show_progress to child processes
+                    if _use_panel_bar:
+                        kw["quiet"] = True
                     future = executor.submit(
                         _run_single_panel,
                         panel_id=panel_id,
                         panel_csv=csv_path,
                         fasta_file=fasta_file,
                         output_dir=output_dir,
+                        _status_dict=status_dict,
                         **kw,
                     )
                     futures[future] = panel_id
@@ -227,25 +266,75 @@ def run_multi_panel(
                 if _use_panel_bar:
                     progress = Progress(
                         SpinnerColumn(),
-                        TextColumn("[bold blue]{task.description}"),
-                        BarColumn(),
-                        MofNCompleteColumn(),
+                        TextColumn("{task.description}"),
                         TimeElapsedColumn(),
                     )
-                    task = progress.add_task("Running panels", total=len(panels))
-                    with progress:
-                        for future in as_completed(futures):
-                            pid = futures[future]
-                            _, result = future.result()
-                            results[pid] = result
-                            logger.info(f"Panel '{pid}' completed.")
-                            progress.advance(task)
+
+                    # Route WARNING+ messages through the progress console
+                    def _warning_sink(message):
+                        progress.console.print(message, end="")
+
+                    warning_handler_id = logger.add(
+                        _warning_sink, level="WARNING", format="{message}"
+                    )
+
+                    # One task row per panel
+                    panel_tasks = {}
+                    for pid in panels:
+                        panel_tasks[pid] = progress.add_task(
+                            f"[bold]{pid}[/bold]: waiting…", total=None
+                        )
+
+                    # Background thread polls shared dict to update descriptions
+                    _stop_poll = threading.Event()
+
+                    def _poll_status():
+                        while not _stop_poll.is_set():
+                            for pid, tid in panel_tasks.items():
+                                step = status_dict.get(pid)
+                                if step and not progress.tasks[tid].finished:
+                                    progress.update(
+                                        tid,
+                                        description=f"[bold]{pid}[/bold]: {step}",
+                                    )
+                            time.sleep(0.3)
+
+                    poll_thread = threading.Thread(target=_poll_status, daemon=True)
+
+                    try:
+                        with progress:
+                            poll_thread.start()
+                            for future in as_completed(futures):
+                                pid = futures[future]
+                                _, result = future.result()
+                                results[pid] = result
+                                status = (
+                                    "[green]done[/green]"
+                                    if result.success
+                                    else "[yellow]done (warnings)[/yellow]"
+                                )
+                                progress.update(
+                                    panel_tasks[pid],
+                                    description=f"[bold]{pid}[/bold]: {status}",
+                                    total=1,
+                                    completed=1,
+                                )
+                                logger.info(f"Panel '{pid}' completed.")
+                    finally:
+                        _stop_poll.set()
+                        poll_thread.join(timeout=1)
+                        logger.remove(warning_handler_id)
+                        restore_console_logging()
                 else:
                     for future in as_completed(futures):
                         pid = futures[future]
                         _, result = future.result()
                         results[pid] = result
                         logger.info(f"Panel '{pid}' completed.")
+
+            # Clean up manager
+            if mgr:
+                mgr.shutdown()
         else:
             logger.info(f"Running {len(panels)} panels sequentially.")
             for panel_id, csv_path in panel_csvs.items():
@@ -261,6 +350,9 @@ def run_multi_panel(
                 )
                 results[panel_id] = result
     finally:
+        # Ensure console logging is restored if we suppressed it
+        if _use_panel_bar:
+            restore_console_logging()
         # Clean up temp CSVs
         shutil.rmtree(tmp_dir, ignore_errors=True)
 

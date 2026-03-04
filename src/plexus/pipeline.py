@@ -308,6 +308,8 @@ def run_pipeline(
     fasta_sha256: str | None = None,
     snp_vcf_sha256: str | None = None,
     show_progress: bool = False,
+    quiet: bool = False,
+    step_callback: callable | None = None,
 ) -> PipelineResult:
     """
     Run the complete multiplex primer design pipeline.
@@ -340,6 +342,14 @@ def run_pipeline(
     show_progress : bool
         If True and stderr is a TTY, show Rich progress bars instead of
         log output on the console (default: False).
+    quiet : bool
+        If True, suppress all console (stderr) log output. File logging
+        is unaffected. Used for child processes in parallel multi-panel
+        mode where the parent shows a panel-level progress bar.
+    step_callback : callable | None
+        Optional callback invoked with the step label string whenever a
+        new pipeline step starts. Used by the orchestrator to update
+        per-panel status in the progress display.
 
     Returns
     -------
@@ -363,6 +373,10 @@ def run_pipeline(
         raise FileNotFoundError(f"Input file not found: {input_file}")
     if not fasta_file.exists():
         raise FileNotFoundError(f"FASTA file not found: {fasta_file}")
+
+    # Quiet mode: suppress console logging entirely (used by parallel child processes)
+    if quiet:
+        suppress_console_logging()
 
     # --- Compliance environment guard ---
     from plexus.resources import get_operational_mode
@@ -468,7 +482,13 @@ def run_pipeline(
     _exc: BaseException | None = None
 
     try:
-        with _progress_context(show_progress) as (_progress, advance_step, sub_task):
+        with _progress_context(show_progress) as (_progress, _advance_step, sub_task):
+            # Wrap advance_step to also fire the external step_callback
+            def advance_step(label=None):
+                _advance_step(label)
+                if step_callback and label:
+                    step_callback(label)
+
             # Enable file logging to output directory
             log_file = configure_file_logging(str(output_dir), debug=debug)
             logger.info(f"Log file: {log_file}")
