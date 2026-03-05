@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 05-03-2026
+
+### Added
+
+- **HTML Visual QC Report (REPT-02)**: New self-contained HTML report (`panel_report.html`) generated alongside `panel_qc.json` after each pipeline run. Includes interactive Plotly.js charts for Tm distribution, amplicon size, GC content, and a cross-reactivity heatmap, plus tables for sequence flags, off-targets, failed junctions, and solution comparison. Reports inline Plotly.js (~1MB) for fully offline viewing. Added `plexus report` CLI command for standalone re-generation from existing pipeline output.
+- **Jinja2 dependency** added for HTML template rendering.
+
 ## [1.0.2] - 04-03-2026
 
 ### Changed

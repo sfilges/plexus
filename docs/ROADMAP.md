@@ -709,13 +709,18 @@ consistently to junction coordinates, VCF queries, and BLAST sequence IDs.
 
 ---
 
-### REPT-02 · Visual QC Report (HTML)
+### ~~REPT-02 · Visual QC Report (HTML)~~ ✅ Implemented in v1.1.0
 
 **Severity: Low**
 
-Transform the `panel_qc.json` (REPT-01) into a visual, standalone HTML report. This should
-include Plotly or Seaborn charts for distributions and a searchable heatmap for the
-cross-reactivity matrix, facilitating rapid review by clinical lab staff.
+Transform the `panel_qc.json` (REPT-01) into a visual, standalone HTML report with Plotly.js
+charts for Tm distribution, amplicon size, GC content, and a cross-reactivity heatmap.
+
+**Implementation:** Added `src/plexus/reporting/html_report.py` with `generate_html_report()`
+and a Jinja2 template (`panel_report.html.j2`) that inlines Plotly.js basic for fully
+offline-capable reports. Integrated into the pipeline after `panel_qc.json` write. Added
+`plexus report` CLI command for standalone re-generation. 11 tests in
+`tests/test_reporting_html.py`.
 
 ---
 
@@ -779,6 +784,6 @@ project.
 | PERF-02 | Pre-filter candidates per junction before optimisation | v1.1 | Low | |
 | EXT-01 | Additional genome presets | v1.1 | Low | |
 | EXT-02 | Chromosome naming normalisation | v1.1 | Low | |
-| REPT-02 | Visual QC Report (HTML) | v1.1 | Low | |
+| ~~REPT-02~~ | ~~Visual QC Report (HTML)~~ | ~~v1.1~~ | ~~Low~~ | ✅ v1.1.0 |
 | SPLIT-01 | Automated Panel Splitting | Future | Future | |
 | ~~TEST-01~~ | ~~End-to-end integration test with real BLAST~~ | ~~v1.0~~ | ~~Important~~ | ✅ v0.4.0 |

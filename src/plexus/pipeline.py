@@ -829,6 +829,18 @@ def run_pipeline(
                         logger.warning(f"Could not write panel QC report: {e}")
                         result.errors.append(f"Panel QC report failed: {e}")
 
+                # HTML QC report (REPT-02)
+                try:
+                    from plexus.reporting.html_report import generate_html_report
+
+                    html_path = generate_html_report(
+                        output_dir, panel_name=panel.panel_name
+                    )
+                    logger.info(f"Wrote HTML QC report to {html_path.name}")
+                except Exception as e:
+                    logger.warning(f"Could not write HTML QC report: {e}")
+                    result.errors.append(f"HTML QC report failed: {e}")
+
                 # Failed junctions report
                 if result.failed_junctions:
                     import pandas as pd

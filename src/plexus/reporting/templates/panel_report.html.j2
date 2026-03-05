@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ panel_name }} — QC Report</title>
+<script>{{ plotly_js }}</script>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1a2e;
+    --muted: #6c757d;
+    --border: #dee2e6;
+    --accent: #2563eb;
+    --green: #16a34a;
+    --red: #dc2626;
+    --yellow: #ca8a04;
+    --card-bg: #f8f9fa;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    line-height: 1.5;
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 1.75rem; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.25rem; margin: 2rem 0 1rem; border-bottom: 2px solid var(--accent); padding-bottom: 0.25rem; }
+  h3 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; }
+  .subtitle { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
+  .header-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+  }
+  .card dt { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .card dd { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; }
+  .badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+  .badge-pass { background: #dcfce7; color: var(--green); }
+  .badge-fail { background: #fee2e2; color: var(--red); }
+  .badge-warn { background: #fef9c3; color: var(--yellow); }
+  .chart-container { margin-bottom: 2rem; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin-bottom: 1.5rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+  th { background: var(--card-bg); font-weight: 600; position: sticky; top: 0; }
+  tr:hover td { background: #f0f4ff; }
+  .seq { font-family: "SF Mono", "Fira Code", monospace; font-size: 0.8rem; word-break: break-all; }
+  .flag-tag {
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    margin-right: 0.25rem;
+  }
+  .flag-homopolymer { background: #fef3c7; color: #92400e; }
+  .flag-high_gc { background: #fee2e2; color: #991b1b; }
+  .flag-low_gc { background: #dbeafe; color: #1e40af; }
+  .provenance {
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .provenance dt { display: inline; font-weight: 600; }
+  .provenance dd { display: inline; margin-right: 1.5rem; }
+  .empty-msg { color: var(--muted); font-style: italic; padding: 1rem; }
+
+  @media print {
+    body { padding: 0.5cm; font-size: 9pt; }
+    .chart-container { page-break-inside: avoid; }
+    h2 { page-break-after: avoid; }
+    table { font-size: 8pt; }
+    .plotly-container { max-height: 400px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ====== HEADER ====== -->
+<h1>{{ panel_name }}</h1>
+<p class="subtitle">Plexus QC Report &mdash; generated {{ report_date }}</p>
+
+<div class="header-grid">
+  <div class="card">
+    <dl>
+      {% if summary %}
+      <dt>Genome</dt><dd>{{ summary.get("genome", "—") }}</dd>
+      <dt>Junctions</dt>
+      <dd>{{ summary.get("num_junctions", "—") }} input &rarr;
+          {{ summary.get("num_selected_pairs", "—") }} designed
+          {% if num_failed > 0 %} &rarr; <span style="color:var(--red)">{{ num_failed }} failed</span>{% endif %}
+      </dd>
+      <dt>Best Multiplex Cost</dt><dd>{{ "%.2f"|format(summary.best_multiplex_cost) if summary.get("best_multiplex_cost") is not none else "—" }}</dd>
+      {% else %}
+      <dt>Panel</dt><dd>{{ panel_name }}</dd>
+      {% endif %}
+    </dl>
+  </div>
+
+  <div class="card">
+    <dl>
+      {% if provenance %}
+      <dt>Plexus Version</dt><dd>{{ provenance.get("plexus_version", "—") }}</dd>
+      <dt>Mode</dt><dd>{{ provenance.get("operational_mode", "—") }}</dd>
+      <dt>Status</dt>
+      <dd>
+        {% set status = provenance.get("status", "unknown") %}
+        {% if status == "completed" %}<span class="badge badge-pass">COMPLETED</span>
+        {% elif status == "failed" %}<span class="badge badge-fail">FAILED</span>
+        {% else %}<span class="badge badge-warn">{{ status|upper }}</span>{% endif %}
+      </dd>
+      {% if provenance.get("compliance_environment") %}
+      <dt>Compliance</dt>
+      <dd>
+        {% set ce = provenance.compliance_environment %}
+        {% set verdicts = [] %}
+        {% for k, v in ce.items() if k != "manifest_version" and v is mapping %}
+          {% if v.get("verdict") == "pass" %}{% set _ = verdicts.append(true) %}
+          {% else %}{% set _ = verdicts.append(false) %}{% endif %}
+        {% endfor %}
+        {% if verdicts and verdicts|select("equalto", false)|list|length == 0 %}
+          <span class="badge badge-pass">ALL PASS</span>
+        {% else %}
+          <span class="badge badge-fail">CHECK FAILURES</span>
+        {% endif %}
+      </dd>
+      {% endif %}
+      {% else %}
+      <dt>Version</dt><dd>—</dd>
+      {% endif %}
+    </dl>
+  </div>
+</div>
+
+<!-- ====== Tm DISTRIBUTION ====== -->
+<h2>Tm Distribution</h2>
+<div class="chart-container" id="tm-chart"></div>
+
+<!-- ====== AMPLICON SIZE ====== -->
+{% if selected_pairs_data %}
+<h2>Amplicon Size</h2>
+<div class="chart-container" id="amplicon-chart"></div>
+
+<!-- ====== GC CONTENT ====== -->
+<h2>GC Content</h2>
+<div class="chart-container" id="gc-chart"></div>
+{% endif %}
+
+<!-- ====== CROSS-REACTIVITY HEATMAP ====== -->
+{% if qc.cross_reactivity_matrix and qc.cross_reactivity_matrix.matrix %}
+<h2>Cross-Reactivity Heatmap</h2>
+<div class="chart-container" id="heatmap-chart"></div>
+{% endif %}
+
+<!-- ====== SEQUENCE FLAGS ====== -->
+{% if qc.sequence_flags.flagged_primers %}
+<h2>Sequence Flags</h2>
+<p style="margin-bottom:0.5rem; font-size:0.85rem; color:var(--muted)">
+  High GC: {{ qc.sequence_flags.high_gc_count }} &bull;
+  Low GC: {{ qc.sequence_flags.low_gc_count }} &bull;
+  Homopolymer: {{ qc.sequence_flags.homopolymer_count }}
+</p>
+<table>
+  <thead><tr><th>Junction</th><th>Dir</th><th>Primer</th><th>GC%</th><th>Sequence</th><th>Flags</th></tr></thead>
+  <tbody>
+  {% for p in qc.sequence_flags.flagged_primers %}
+  <tr>
+    <td>{{ p.junction }}</td>
+    <td>{{ p.direction }}</td>
+    <td>{{ p.name }}</td>
+    <td>{{ p.gc }}</td>
+    <td class="seq">{{ p.sequence }}</td>
+    <td>{% for f in p.flags %}<span class="flag-tag flag-{{ f }}">{{ f }}</span>{% endfor %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<!-- ====== OFF-TARGETS ====== -->
+{% if off_targets_data %}
+<h2>Off-Target Products</h2>
+<table>
+  <thead><tr><th>Pair</th><th>Junction</th><th>Chrom</th><th>F Primer</th><th>R Primer</th><th>Size (bp)</th></tr></thead>
+  <tbody>
+  {% for ot in off_targets_data %}
+  <tr>
+    <td>{{ ot.get("Pair_ID", "—") }}</td>
+    <td>{{ ot.get("Junction", "—") }}</td>
+    <td>{{ ot.get("OT_Chrom", "—") }}</td>
+    <td>{{ ot.get("OT_F_Primer", "—") }}</td>
+    <td>{{ ot.get("OT_R_Primer", "—") }}</td>
+    <td>{{ ot.get("OT_Product_Size", "—") }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<!-- ====== FAILED JUNCTIONS ====== -->
+{% if failed_junctions_data %}
+<h2>Failed Junctions</h2>
+<table>
+  <thead><tr><th>Junction</th><th>Chrom</th><th>Start</th><th>End</th><th>Error</th></tr></thead>
+  <tbody>
+  {% for fj in failed_junctions_data %}
+  <tr>
+    <td>{{ fj.get("Junction", "—") }}</td>
+    <td>{{ fj.get("Chrom", "—") }}</td>
+    <td>{{ fj.get("Start", "—") }}</td>
+    <td>{{ fj.get("End", "—") }}</td>
+    <td>{{ fj.get("Error", "—") }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<!-- ====== SOLUTION COMPARISON ====== -->
+{% if top_panels_data and top_panels_data|length > 1 %}
+<h2>Solution Comparison</h2>
+<p style="margin-bottom:0.5rem; font-size:0.85rem; color:var(--muted)">
+  Top {{ top_panels_data|map(attribute="Solution_Rank")|unique|list|length }} solutions shown.
+</p>
+<table>
+  <thead><tr><th>Rank</th><th>Cost</th><th>Junction</th><th>Pair</th></tr></thead>
+  <tbody>
+  {% set ns = namespace(prev_rank="") %}
+  {% for row in top_panels_data %}
+  <tr>
+    {% if row.Solution_Rank|string != ns.prev_rank %}
+    <td><strong>{{ row.Solution_Rank }}</strong></td>
+    <td><strong>{{ "%.2f"|format(row.Solution_Cost) }}</strong></td>
+    {% set ns.prev_rank = row.Solution_Rank|string %}
+    {% else %}
+    <td></td><td></td>
+    {% endif %}
+    <td>{{ row.Junction }}</td>
+    <td style="font-size:0.8rem">{{ row.Pair_ID }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<!-- ====== PROVENANCE ====== -->
+{% if provenance %}
+<div class="provenance">
+  <h3>Provenance</h3>
+  <dl>
+    <dt>Run:</dt><dd>{{ provenance.get("run_timestamp", "—") }}</dd>
+    {% if provenance.get("completed_at") %}<dt>Completed:</dt><dd>{{ provenance.completed_at }}</dd>{% endif %}
+    <dt>FASTA:</dt><dd>{{ provenance.get("fasta_sha256", "—")[:16] }}&hellip;</dd>
+    {% if provenance.get("snp_vcf_sha256") %}<dt>VCF:</dt><dd>{{ provenance.snp_vcf_sha256[:16] }}&hellip;</dd>{% endif %}
+    {% if provenance.get("tool_versions") %}
+    {% for tool, ver in provenance.tool_versions.items() %}
+    <dt>{{ tool }}:</dt><dd>{{ ver }}</dd>
+    {% endfor %}
+    {% endif %}
+  </dl>
+</div>
+{% endif %}
+
+<p style="margin-top:2rem; font-size:0.75rem; color:var(--muted); text-align:center;">
+  Generated by Plexus {{ plexus_version }}
+</p>
+
+<!-- ====== PLOTLY CHARTS ====== -->
+<script>
+(function() {
+  var qc = {{ qc_json }};
+  var config = {responsive: true, displayModeBar: false};
+
+  // --- Tm Distribution ---
+  var tmData = qc.tm_distribution.per_primer;
+  if (tmData && tmData.length > 0) {
+    var junctions = [];
+    var seen = {};
+    for (var i = 0; i < tmData.length; i++) {
+      if (!seen[tmData[i].junction]) {
+        junctions.push(tmData[i].junction);
+        seen[tmData[i].junction] = true;
+      }
+    }
+
+    var fwdX = [], fwdY = [], fwdText = [];
+    var revX = [], revY = [], revText = [];
+    for (var i = 0; i < tmData.length; i++) {
+      var d = tmData[i];
+      if (d.direction === "forward") {
+        fwdX.push(d.junction); fwdY.push(d.tm); fwdText.push(d.name + ": " + d.tm + "°C");
+      } else {
+        revX.push(d.junction); revY.push(d.tm); revText.push(d.name + ": " + d.tm + "°C");
+      }
+    }
+
+    var tmMin = qc.tm_distribution.min || 57;
+    var tmMax = qc.tm_distribution.max || 63;
+
+    Plotly.newPlot("tm-chart", [
+      {x: fwdX, y: fwdY, text: fwdText, type: "scatter", mode: "markers",
+       name: "Forward", marker: {size: 10, color: "#2563eb"}, hoverinfo: "text"},
+      {x: revX, y: revY, text: revText, type: "scatter", mode: "markers",
+       name: "Reverse", marker: {size: 10, color: "#dc2626", symbol: "diamond"}, hoverinfo: "text"},
+      {x: junctions, y: junctions.map(function(){return tmMin;}), type: "scatter", mode: "lines",
+       line: {color: "rgba(37,99,235,0.15)", width: 0}, showlegend: false, hoverinfo: "skip"},
+      {x: junctions, y: junctions.map(function(){return tmMax;}), type: "scatter", mode: "lines",
+       line: {color: "rgba(37,99,235,0.15)", width: 0}, fill: "tonexty",
+       fillcolor: "rgba(37,99,235,0.07)", showlegend: false, hoverinfo: "skip"}
+    ], {
+      yaxis: {title: "Tm (°C)", range: [tmMin - 2, tmMax + 2]},
+      xaxis: {tickangle: -45},
+      margin: {b: 120, t: 30, l: 60, r: 30},
+      height: 350,
+      legend: {orientation: "h", y: 1.1}
+    }, config);
+  }
+
+  // --- Amplicon Size ---
+  {% if selected_pairs_data %}
+  var pairs = {{ selected_pairs_json }};
+  if (pairs && pairs.length > 0) {
+    var ampJunctions = pairs.map(function(p){return p.Junction;});
+    var ampSizes = pairs.map(function(p){return p.Amplicon_Length;});
+    var ampColors = ampSizes.map(function(s){
+      return (s >= 60 && s <= 120) ? "#2563eb" : "#ca8a04";
+    });
+
+    Plotly.newPlot("amplicon-chart", [{
+      x: ampJunctions, y: ampSizes, type: "bar",
+      marker: {color: ampColors},
+      text: ampSizes.map(function(s){return s + " bp";}),
+      hoverinfo: "text+x"
+    }], {
+      yaxis: {title: "Amplicon Length (bp)"},
+      xaxis: {tickangle: -45},
+      margin: {b: 120, t: 30, l: 60, r: 30},
+      height: 350,
+      shapes: [{
+        type: "rect", xref: "paper", x0: 0, x1: 1,
+        yref: "y", y0: 60, y1: 120,
+        fillcolor: "rgba(37,99,235,0.05)", line: {width: 0}
+      }]
+    }, config);
+
+    // --- GC Content ---
+    var gcFwdX = [], gcFwdY = [], gcRevX = [], gcRevY = [];
+    for (var i = 0; i < pairs.length; i++) {
+      gcFwdX.push(pairs[i].Junction); gcFwdY.push(pairs[i].Forward_GC);
+      gcRevX.push(pairs[i].Junction); gcRevY.push(pairs[i].Reverse_GC);
+    }
+
+    Plotly.newPlot("gc-chart", [
+      {x: gcFwdX, y: gcFwdY, type: "scatter", mode: "markers",
+       name: "Forward", marker: {size: 10, color: "#2563eb"}, hovertemplate: "%{x}<br>Forward GC: %{y:.1f}%<extra></extra>"},
+      {x: gcRevX, y: gcRevY, type: "scatter", mode: "markers",
+       name: "Reverse", marker: {size: 10, color: "#dc2626", symbol: "diamond"}, hovertemplate: "%{x}<br>Reverse GC: %{y:.1f}%<extra></extra>"}
+    ], {
+      yaxis: {title: "GC Content (%)", range: [20, 80]},
+      xaxis: {tickangle: -45},
+      margin: {b: 120, t: 30, l: 60, r: 30},
+      height: 350,
+      legend: {orientation: "h", y: 1.1},
+      shapes: [
+        {type: "rect", xref: "paper", x0: 0, x1: 1, yref: "y", y0: 30, y1: 70,
+         fillcolor: "rgba(22,163,74,0.06)", line: {width: 0}},
+        {type: "line", xref: "paper", x0: 0, x1: 1, yref: "y", y0: 30, y1: 30,
+         line: {color: "rgba(22,163,74,0.3)", width: 1, dash: "dash"}},
+        {type: "line", xref: "paper", x0: 0, x1: 1, yref: "y", y0: 70, y1: 70,
+         line: {color: "rgba(22,163,74,0.3)", width: 1, dash: "dash"}}
+      ]
+    }, config);
+  }
+  {% endif %}
+
+  // --- Cross-Reactivity Heatmap ---
+  {% if qc.cross_reactivity_matrix and qc.cross_reactivity_matrix.matrix %}
+  var matrix = qc.cross_reactivity_matrix.matrix;
+  var labels = Object.keys(matrix);
+  if (labels.length > 0) {
+    var z = [];
+    var hoverText = [];
+    for (var i = 0; i < labels.length; i++) {
+      var row = [];
+      var hRow = [];
+      for (var j = 0; j < labels.length; j++) {
+        if (i === j) {
+          row.push(null);
+          hRow.push(labels[i] + " (self)");
+        } else {
+          var cell = (matrix[labels[i]] || {})[labels[j]];
+          if (cell) {
+            row.push(cell.min_dimer_score);
+            hRow.push(labels[i] + " vs " + labels[j] + "<br>Score: " + cell.min_dimer_score + "<br>Interactions: " + cell.interaction_count);
+          } else {
+            row.push(null);
+            hRow.push("N/A");
+          }
+        }
+      }
+      z.push(row);
+      hoverText.push(hRow);
+    }
+
+    // Short labels for display
+    var shortLabels = labels.map(function(l) {
+      var parts = l.split("_");
+      return parts[0];
+    });
+
+    Plotly.newPlot("heatmap-chart", [{
+      z: z, x: shortLabels, y: shortLabels,
+      type: "heatmap",
+      colorscale: [[0, "#dc2626"], [0.5, "#fbbf24"], [1, "#ffffff"]],
+      zmin: -12, zmax: 0,
+      hoverongaps: false,
+      text: hoverText,
+      hoverinfo: "text",
+      colorbar: {title: "Min Dimer Score", titleside: "right"}
+    }], {
+      xaxis: {tickangle: -45, side: "bottom"},
+      yaxis: {autorange: "reversed"},
+      margin: {b: 100, t: 30, l: 100, r: 30},
+      height: Math.max(400, labels.length * 35 + 150)
+    }, config);
+  }
+  {% endif %}
+})();
+</script>
+
+</body>
+</html>

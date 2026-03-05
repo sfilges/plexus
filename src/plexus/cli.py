@@ -673,6 +673,48 @@ def template(
     )
 
 
+@app.command()
+def report(
+    output_dir: Annotated[
+        Path,
+        typer.Argument(help="Pipeline output directory containing panel_qc.json."),
+    ],
+    output_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Output HTML path (default: <output_dir>/panel_report.html).",
+        ),
+    ] = None,
+) -> None:
+    """Generate an HTML QC report from existing pipeline output."""
+    from plexus.reporting.html_report import generate_html_report
+
+    if not output_dir.is_dir():
+        console.print(f"[bold red]Error: {output_dir} is not a directory[/bold red]")
+        raise typer.Exit(code=1)
+
+    qc_path = output_dir / "panel_qc.json"
+    if not qc_path.is_file():
+        console.print(
+            f"[bold red]Error: panel_qc.json not found in {output_dir}[/bold red]"
+        )
+        raise typer.Exit(code=1)
+
+    try:
+        html_path = generate_html_report(output_dir)
+        if output_file is not None:
+            import shutil
+
+            shutil.move(str(html_path), str(output_file))
+            html_path = output_file
+        console.print(f"[bold green]Report written to:[/bold green] {html_path}")
+    except Exception as e:
+        console.print(f"[bold red]Error generating report: {e}[/bold red]")
+        raise typer.Exit(code=1) from e
+
+
 import plexus.cli_docker  # noqa: E402, F401  — registers docker command
 
 if __name__ == "__main__":
