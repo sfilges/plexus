@@ -1,4 +1,5 @@
 import os
+import resource
 
 import pandas as pd
 from loguru import logger
@@ -7,6 +8,24 @@ from plexus.blast.annotator import BlastResultsAnnotator
 from plexus.blast.blast_runner import BlastRunner
 from plexus.blast.offtarget_finder import AmpliconFinder
 from plexus.designer.multiplexpanel import MultiplexPanel
+
+
+def _log_df_memory(name: str, df: pd.DataFrame) -> None:
+    """Log row count and deep memory usage of a DataFrame."""
+    mb = df.memory_usage(deep=True).sum() / 1_048_576
+    logger.info(f"{name}: {len(df):,} rows, {mb:.1f} MB")
+
+
+def _log_process_memory() -> None:
+    """Log peak RSS of the current process."""
+    ru = resource.getrusage(resource.RUSAGE_SELF)
+    # macOS reports ru_maxrss in bytes; Linux in kilobytes
+    peak_mb = (
+        ru.ru_maxrss / 1_048_576
+        if os.uname().sysname == "Darwin"
+        else ru.ru_maxrss / 1024
+    )
+    logger.info(f"Process peak RSS: {peak_mb:.1f} MB")
 
 
 def run_specificity_check(
@@ -82,6 +101,8 @@ def run_specificity_check(
         dust=blast_dust,
     )
     blast_df = runner.get_dataframe()
+    _log_df_memory("blast_df", blast_df)
+    _log_process_memory()
 
     if blast_df.empty:
         logger.warning("BLAST returned no hits.")
@@ -100,8 +121,19 @@ def run_specificity_check(
 
     # 5. Find Off-Target Amplicons
     bound_df = annotator.get_predicted_bound()
+    _log_df_memory("bound_df", bound_df)
+
+    # Free the full BLAST results — only bound_df is needed from here on
+    del blast_df, runner, annotator
+    _log_process_memory()
+
     finder = AmpliconFinder(bound_df, target_map=target_map)
     finder.find_amplicons(max_size_bp=max_amplicon_size)
+    _log_df_memory(
+        "amplicon_df",
+        finder.amplicon_df if finder.amplicon_df is not None else pd.DataFrame(),
+    )
+    _log_process_memory()
 
     all_amplicons_df = finder.amplicon_df
 
@@ -176,6 +208,7 @@ def run_specificity_check(
                 "Check BLAST sensitivity or junction coordinates."
             )
 
+    _log_process_memory()
     logger.info("Specificity check complete.")
 
 
