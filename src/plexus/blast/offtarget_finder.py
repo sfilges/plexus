@@ -179,5 +179,6 @@ class AmpliconFinder:
         # Store
         if result_chunks:
             self.amplicon_df = pd.concat(result_chunks, ignore_index=True)
+            del result_chunks
         else:
             self.amplicon_df = pd.DataFrame(columns=amplicon_columns)
