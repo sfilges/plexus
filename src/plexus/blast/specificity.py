@@ -1,5 +1,6 @@
 import os
 
+import pandas as pd
 from loguru import logger
 
 from plexus.blast.annotator import BlastResultsAnnotator
@@ -109,14 +110,8 @@ def run_specificity_check(
         return
 
     # 6. Map results back to PrimerPairs
-    amplicon_map = {}
-    for _, row in all_amplicons_df.iterrows():
-        f_id = row["F_primer"]  # SEQ_X
-        r_id = row["R_primer"]  # SEQ_Y
-
-        if (f_id, r_id) not in amplicon_map:
-            amplicon_map[(f_id, r_id)] = []
-        amplicon_map[(f_id, r_id)].append(row.to_dict())
+    amplicon_groups = all_amplicons_df.groupby(["F_primer", "R_primer"])
+    _empty = pd.DataFrame()
 
     # Use the panel's unique map to look up IDs
     seq_to_id = panel.unique_primer_map
@@ -138,19 +133,30 @@ def run_specificity_check(
             pair.specificity_checked = True
             n_checked += 1
 
-            potential_products = amplicon_map.get((f_id, r_id), [])
-            potential_products += amplicon_map.get((r_id, f_id), [])
+            fwd = (
+                amplicon_groups.get_group((f_id, r_id))
+                if (f_id, r_id) in amplicon_groups.groups
+                else _empty
+            )
+            rev = (
+                amplicon_groups.get_group((r_id, f_id))
+                if (r_id, f_id) in amplicon_groups.groups
+                else _empty
+            )
+            potential_products = pd.concat([fwd, rev]) if not rev.empty else fwd
 
-            off_targets = []
-            on_targets = []
-            for prod in potential_products:
-                if _is_on_target(prod, junction, pair, tolerance=ontarget_tolerance):
-                    on_targets.append(prod)
-                else:
-                    off_targets.append(prod)
-
-            pair.off_target_products = off_targets
-            pair.on_target_detected = len(on_targets) > 0
+            if potential_products.empty:
+                pair.off_target_products = []
+                pair.on_target_detected = False
+            else:
+                on_mask = _is_on_target_vec(
+                    potential_products, junction, pair, tolerance=ontarget_tolerance
+                )
+                pair.on_target_detected = bool(on_mask.any())
+                off_df = potential_products[~on_mask]
+                pair.off_target_products = (
+                    off_df.to_dict("records") if not off_df.empty else []
+                )
 
             if not pair.on_target_detected:
                 n_missing_on_target += 1
@@ -158,9 +164,9 @@ def run_specificity_check(
                     f"Pair {pair.pair_id}: on-target amplicon not detected by BLAST."
                 )
 
-            if off_targets:
+            if pair.off_target_products:
                 logger.debug(
-                    f"Pair {pair.pair_id} has {len(off_targets)} off-target products."
+                    f"Pair {pair.pair_id} has {len(pair.off_target_products)} off-target products."
                 )
 
         if n_missing_on_target > 0:
@@ -230,6 +236,18 @@ def filter_offtarget_pairs(panel: MultiplexPanel) -> tuple[int, list[str]]:
         total_removed += removed
 
     return total_removed, fallback_junctions
+
+
+def _is_on_target_vec(df, junction, pair, tolerance: int = 5):
+    """Vectorized on-target classification for a DataFrame of amplicons."""
+    design_start = getattr(junction, "design_start", None) or 0
+    expected_fwd = design_start + pair.forward.start
+    expected_rev = design_start + pair.reverse.start + pair.reverse.length - 1
+    return (
+        (df["chrom"] == junction.chrom)
+        & ((df["F_start"] - expected_fwd).abs() <= tolerance)
+        & ((df["R_start"] - expected_rev).abs() <= tolerance)
+    )
 
 
 def _is_on_target(prod: dict, junction, pair, tolerance: int = 5) -> bool:
