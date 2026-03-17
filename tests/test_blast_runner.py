@@ -255,6 +255,32 @@ def test_get_dataframe(runner, tmp_path):
     assert df.iloc[0]["qseqid"] == "Q1"
 
 
+def test_get_dataframe_uses_compact_dtypes(runner, tmp_path):
+    """DataFrame uses categorical strings and downcasted numerics."""
+    output_table = tmp_path / "output.txt"
+    runner.output_table = str(output_table)
+
+    dummy_data = ["Q1", "S1", 100, 20, 0, 0, 1, 20, 100, 119, 0.0, 40.0, "plus", 20]
+    df_content = "	".join(map(str, dummy_data))
+    output_table.write_text(df_content)
+
+    df = runner.get_dataframe()
+
+    # String columns should be categorical
+    for col in ("qseqid", "sseqid", "sstrand"):
+        assert df[col].dtype.name == "category", f"{col} should be categorical"
+
+    # Numeric columns should be downcasted
+    assert df["sstart"].dtype == "int32"
+    assert df["send"].dtype == "int32"
+    assert df["length"].dtype == "int32"
+    assert df["mismatch"].dtype == "int32"
+    assert df["evalue"].dtype == "float32"
+    assert df["pident"].dtype == "float32"
+    assert df["bitscore"].dtype == "float32"
+    assert df["qlen"].dtype == "int16"
+
+
 def test_run_direct_tabular_output(runner, tmp_path):
     """output_table= produces outfmt 6 and sets self.output_table."""
     output_table = str(tmp_path / "table.txt")

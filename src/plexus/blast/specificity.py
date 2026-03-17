@@ -46,6 +46,7 @@ def run_specificity_check(
     blast_penalty: int = -1,
     blast_max_hsps: int = 100,
     blast_dust: str = "yes",
+    max_bound_per_primer: int | None = 10000,
 ):
     """
     Run BLAST on all candidate primers in the panel to check for specificity
@@ -123,87 +124,92 @@ def run_specificity_check(
     bound_df = annotator.get_predicted_bound()
     _log_df_memory("bound_df", bound_df)
 
+    if max_bound_per_primer is not None:
+        pre_cap = len(bound_df)
+        bound_df = (
+            bound_df.sort_values("evalue")
+            .groupby("qseqid", observed=True)
+            .head(max_bound_per_primer)
+            .reset_index(drop=True)
+        )
+        if len(bound_df) < pre_cap:
+            n_capped = (
+                bound_df.groupby("qseqid", observed=True)
+                .size()
+                .eq(max_bound_per_primer)
+                .sum()
+            )
+            logger.info(
+                f"Per-primer cap ({max_bound_per_primer}): "
+                f"{pre_cap:,} → {len(bound_df):,} bound hits "
+                f"({n_capped} primer(s) capped)"
+            )
+            _log_df_memory("bound_df (after cap)", bound_df)
+
     # Free the full BLAST results — only bound_df is needed from here on
     del blast_df, runner, annotator
     _log_process_memory()
 
-    finder = AmpliconFinder(bound_df, target_map=target_map)
-    finder.find_amplicons(max_size_bp=max_amplicon_size)
-    _log_df_memory(
-        "amplicon_df",
-        finder.amplicon_df if finder.amplicon_df is not None else pd.DataFrame(),
-    )
-    _log_process_memory()
-
-    all_amplicons_df = finder.amplicon_df
-
-    if all_amplicons_df is None or all_amplicons_df.empty:
-        logger.info("No amplicons found (on- or off-target).")
-        return
-
-    # 6. Map results back to PrimerPairs
-    amplicon_groups = all_amplicons_df.groupby(["F_primer", "R_primer"])
-    _empty = pd.DataFrame()
-
-    # Use the panel's unique map to look up IDs
+    # 6. Build reverse lookup: (f_id, r_id) -> [(junction, pair), ...]
     seq_to_id = panel.unique_primer_map
-
+    id_to_pairs: dict[tuple[str, str], list[tuple]] = {}
     for junction in panel.junctions:
-        n_checked = 0
-        n_missing_on_target = 0
-
         for pair in junction.primer_pairs:
-            f_seq = pair.forward.seq
-            r_seq = pair.reverse.seq
-
-            f_id = seq_to_id.get(f_seq)
-            r_id = seq_to_id.get(r_seq)
-
+            f_id = seq_to_id.get(pair.forward.seq)
+            r_id = seq_to_id.get(pair.reverse.seq)
             if not f_id or not r_id:
                 continue
-
             pair.specificity_checked = True
-            n_checked += 1
+            pair.off_target_products = []
+            pair.on_target_detected = False
+            id_to_pairs.setdefault((f_id, r_id), []).append((junction, pair))
+            id_to_pairs.setdefault((r_id, f_id), []).append((junction, pair))
 
-            fwd = (
-                amplicon_groups.get_group((f_id, r_id))
-                if (f_id, r_id) in amplicon_groups.groups
-                else _empty
-            )
-            rev = (
-                amplicon_groups.get_group((r_id, f_id))
-                if (r_id, f_id) in amplicon_groups.groups
-                else _empty
-            )
-            potential_products = pd.concat([fwd, rev]) if not rev.empty else fwd
-
-            if potential_products.empty:
-                pair.off_target_products = []
-                pair.on_target_detected = False
-            else:
+    # 7. Process amplicons per chromosome to bound peak memory
+    finder = AmpliconFinder(bound_df, target_map=target_map)
+    total_amplicons = 0
+    for _chrom, chrom_amp_df in finder.find_amplicons_by_chrom(
+        max_size_bp=max_amplicon_size
+    ):
+        total_amplicons += len(chrom_amp_df)
+        for (f_id, r_id), group_df in chrom_amp_df.groupby(
+            ["F_primer", "R_primer"], observed=True
+        ):
+            for junction, pair in id_to_pairs.get((f_id, r_id), []):
                 on_mask = _is_on_target_vec(
-                    potential_products, junction, pair, tolerance=ontarget_tolerance
+                    group_df, junction, pair, tolerance=ontarget_tolerance
                 )
-                pair.on_target_detected = bool(on_mask.any())
-                off_df = potential_products[~on_mask]
-                pair.off_target_products = (
-                    off_df.to_dict("records") if not off_df.empty else []
-                )
+                if on_mask.any():
+                    pair.on_target_detected = True
+                off_df = group_df[~on_mask]
+                if not off_df.empty:
+                    pair.off_target_products.extend(off_df.to_dict("records"))
 
+    if total_amplicons == 0:
+        logger.info("No amplicons found (on- or off-target).")
+    else:
+        logger.info(f"Processed {total_amplicons:,} amplicons across all chromosomes")
+
+    # Post-loop: log per-pair debug info and per-junction warnings
+    for junction in panel.junctions:
+        n_checked = sum(1 for p in junction.primer_pairs if p.specificity_checked)
+        n_missing = 0
+        for pair in junction.primer_pairs:
+            if not pair.specificity_checked:
+                continue
             if not pair.on_target_detected:
-                n_missing_on_target += 1
+                n_missing += 1
                 logger.debug(
                     f"Pair {pair.pair_id}: on-target amplicon not detected by BLAST."
                 )
-
             if pair.off_target_products:
                 logger.debug(
-                    f"Pair {pair.pair_id} has {len(pair.off_target_products)} off-target products."
+                    f"Pair {pair.pair_id} has {len(pair.off_target_products)} "
+                    "off-target products."
                 )
-
-        if n_missing_on_target > 0:
+        if n_missing > 0:
             logger.warning(
-                f"Junction {junction.name}: {n_missing_on_target}/{n_checked} pairs "
+                f"Junction {junction.name}: {n_missing}/{n_checked} pairs "
                 "have no on-target amplicon detected by BLAST. "
                 "Check BLAST sensitivity or junction coordinates."
             )

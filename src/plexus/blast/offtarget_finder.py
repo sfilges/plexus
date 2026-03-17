@@ -146,33 +146,49 @@ class AmpliconFinder:
                     "R_target": r_targets,
                     "F_primer": np.full(n_matches, f_qseqid),
                     "R_primer": matched_r_qseqids,
-                    "F_start": np.full(n_matches, f_start, dtype=int),
-                    "R_start": matched_r_starts,
-                    "product_bp": matched_r_starts - f_start + 1,
+                    "F_start": np.full(n_matches, f_start, dtype=np.int32),
+                    "R_start": matched_r_starts.astype(np.int32),
+                    "product_bp": (matched_r_starts - f_start + 1).astype(np.int32),
                     "F_pident": np.full(
-                        n_matches, f_pident[i] if f_pident is not None else None
+                        n_matches,
+                        f_pident[i] if f_pident is not None else np.nan,
+                        dtype=np.float32,
                     ),
-                    "R_pident": r_pident[lo:hi]
-                    if r_pident is not None
-                    else np.full(n_matches, None),
+                    "R_pident": (
+                        r_pident[lo:hi].astype(np.float32)
+                        if r_pident is not None
+                        else np.full(n_matches, np.nan, dtype=np.float32)
+                    ),
                     "F_mismatch": np.full(
-                        n_matches, f_mismatch[i] if f_mismatch is not None else None
+                        n_matches,
+                        f_mismatch[i] if f_mismatch is not None else -1,
+                        dtype=np.int32,
                     ),
-                    "R_mismatch": r_mismatch[lo:hi]
-                    if r_mismatch is not None
-                    else np.full(n_matches, None),
+                    "R_mismatch": (
+                        r_mismatch[lo:hi].astype(np.int32)
+                        if r_mismatch is not None
+                        else np.full(n_matches, -1, dtype=np.int32)
+                    ),
                     "F_align_len": np.full(
-                        n_matches, f_length[i] if f_length is not None else None
+                        n_matches,
+                        f_length[i] if f_length is not None else -1,
+                        dtype=np.int32,
                     ),
-                    "R_align_len": r_length[lo:hi]
-                    if r_length is not None
-                    else np.full(n_matches, None),
+                    "R_align_len": (
+                        r_length[lo:hi].astype(np.int32)
+                        if r_length is not None
+                        else np.full(n_matches, -1, dtype=np.int32)
+                    ),
                     "F_evalue": np.full(
-                        n_matches, f_evalue[i] if f_evalue is not None else None
+                        n_matches,
+                        f_evalue[i] if f_evalue is not None else np.nan,
+                        dtype=np.float32,
                     ),
-                    "R_evalue": r_evalue[lo:hi]
-                    if r_evalue is not None
-                    else np.full(n_matches, None),
+                    "R_evalue": (
+                        r_evalue[lo:hi].astype(np.float32)
+                        if r_evalue is not None
+                        else np.full(n_matches, np.nan, dtype=np.float32)
+                    ),
                 }
                 result_chunks.append(pd.DataFrame(chunk, columns=amplicon_columns))
 
@@ -180,5 +196,137 @@ class AmpliconFinder:
         if result_chunks:
             self.amplicon_df = pd.concat(result_chunks, ignore_index=True)
             del result_chunks
+            for col in ("chrom", "F_target", "R_target", "F_primer", "R_primer"):
+                self.amplicon_df[col] = self.amplicon_df[col].astype("category")
         else:
             self.amplicon_df = pd.DataFrame(columns=amplicon_columns)
+
+    def find_amplicons_by_chrom(self, max_size_bp=6000):
+        """Yield (chrom, amplicon_df) tuples, one per chromosome.
+
+        Same logic as find_amplicons() but yields per-chromosome results
+        instead of accumulating into self.amplicon_df. This bounds peak
+        memory to the largest single chromosome's amplicon set.
+        """
+        amplicon_columns = [
+            "chrom",
+            "F_target",
+            "R_target",
+            "F_primer",
+            "R_primer",
+            "F_start",
+            "R_start",
+            "product_bp",
+            "F_pident",
+            "R_pident",
+            "F_mismatch",
+            "R_mismatch",
+            "F_align_len",
+            "R_align_len",
+            "F_evalue",
+            "R_evalue",
+        ]
+        target_map = self.target_map
+
+        for chrom, chrom_df in self.bound_df.groupby("sseqid"):
+            fwd = chrom_df[chrom_df["sstrand"] == "plus"]
+            rev = chrom_df[chrom_df["sstrand"] == "minus"]
+
+            if fwd.empty or rev.empty:
+                continue
+
+            # Sort reverse hits by sstart for searchsorted
+            rev = rev.sort_values("sstart")
+            r_starts = rev["sstart"].values
+            r_qseqids = rev["qseqid"].values
+            r_pident = self._get_col_or_none(rev, "pident")
+            r_mismatch = self._get_col_or_none(rev, "mismatch")
+            r_length = self._get_col_or_none(rev, "length")
+            r_evalue = self._get_col_or_none(rev, "evalue")
+
+            f_starts = fwd["sstart"].values
+            f_qseqids = fwd["qseqid"].values
+            f_pident = self._get_col_or_none(fwd, "pident")
+            f_mismatch = self._get_col_or_none(fwd, "mismatch")
+            f_length = self._get_col_or_none(fwd, "length")
+            f_evalue = self._get_col_or_none(fwd, "evalue")
+
+            result_chunks = []
+
+            for i in range(len(f_starts)):
+                f_start = f_starts[i]
+                lo = np.searchsorted(r_starts, f_start, side="right")
+                hi = np.searchsorted(r_starts, f_start + max_size_bp, side="left")
+
+                if lo >= hi:
+                    continue
+
+                n_matches = hi - lo
+                f_qseqid = f_qseqids[i]
+                f_target = target_map.get(f_qseqid, f_qseqid.split("_")[0])
+
+                matched_r_starts = r_starts[lo:hi]
+                matched_r_qseqids = r_qseqids[lo:hi]
+
+                r_targets = [
+                    target_map.get(rq, rq.split("_")[0]) for rq in matched_r_qseqids
+                ]
+
+                chunk = {
+                    "chrom": np.full(n_matches, chrom),
+                    "F_target": np.full(n_matches, f_target),
+                    "R_target": r_targets,
+                    "F_primer": np.full(n_matches, f_qseqid),
+                    "R_primer": matched_r_qseqids,
+                    "F_start": np.full(n_matches, f_start, dtype=np.int32),
+                    "R_start": matched_r_starts.astype(np.int32),
+                    "product_bp": (matched_r_starts - f_start + 1).astype(np.int32),
+                    "F_pident": np.full(
+                        n_matches,
+                        f_pident[i] if f_pident is not None else np.nan,
+                        dtype=np.float32,
+                    ),
+                    "R_pident": (
+                        r_pident[lo:hi].astype(np.float32)
+                        if r_pident is not None
+                        else np.full(n_matches, np.nan, dtype=np.float32)
+                    ),
+                    "F_mismatch": np.full(
+                        n_matches,
+                        f_mismatch[i] if f_mismatch is not None else -1,
+                        dtype=np.int32,
+                    ),
+                    "R_mismatch": (
+                        r_mismatch[lo:hi].astype(np.int32)
+                        if r_mismatch is not None
+                        else np.full(n_matches, -1, dtype=np.int32)
+                    ),
+                    "F_align_len": np.full(
+                        n_matches,
+                        f_length[i] if f_length is not None else -1,
+                        dtype=np.int32,
+                    ),
+                    "R_align_len": (
+                        r_length[lo:hi].astype(np.int32)
+                        if r_length is not None
+                        else np.full(n_matches, -1, dtype=np.int32)
+                    ),
+                    "F_evalue": np.full(
+                        n_matches,
+                        f_evalue[i] if f_evalue is not None else np.nan,
+                        dtype=np.float32,
+                    ),
+                    "R_evalue": (
+                        r_evalue[lo:hi].astype(np.float32)
+                        if r_evalue is not None
+                        else np.full(n_matches, np.nan, dtype=np.float32)
+                    ),
+                }
+                result_chunks.append(pd.DataFrame(chunk, columns=amplicon_columns))
+
+            if result_chunks:
+                chrom_amplicon_df = pd.concat(result_chunks, ignore_index=True)
+                del result_chunks
+                for col in ("chrom", "F_target", "R_target", "F_primer", "R_primer"):
+                    chrom_amplicon_df[col] = chrom_amplicon_df[col].astype("category")
+                yield chrom, chrom_amplicon_df

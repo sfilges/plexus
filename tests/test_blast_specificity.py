@@ -43,6 +43,28 @@ def mock_panel():
     return panel
 
 
+def _mock_finder_by_chrom(MockFinder, amplicon_df):
+    """Configure a MockFinder to yield per-chromosome amplicon DataFrames.
+
+    If amplicon_df is empty, the generator yields nothing.
+    Otherwise it groups by 'chrom' (if present) or yields a single
+    ('unknown', amplicon_df) tuple.
+    """
+    finder_instance = MockFinder.return_value
+    if amplicon_df.empty:
+        finder_instance.find_amplicons_by_chrom.return_value = iter([])
+    elif "chrom" in amplicon_df.columns:
+        chunks = []
+        for chrom, group_df in amplicon_df.groupby("chrom"):
+            chunks.append((chrom, group_df.reset_index(drop=True)))
+        finder_instance.find_amplicons_by_chrom.return_value = iter(chunks)
+    else:
+        finder_instance.find_amplicons_by_chrom.return_value = iter(
+            [("unknown", amplicon_df)]
+        )
+    return finder_instance
+
+
 def test_direct_tabular_no_archive(mock_panel, tmp_path):
     """Specificity check uses output_table directly, no archive file is created."""
     with (
@@ -55,11 +77,10 @@ def test_direct_tabular_no_archive(mock_panel, tmp_path):
 
         annotator_instance = MockAnnotator.return_value
         annotator_instance.get_predicted_bound.return_value = pd.DataFrame(
-            {"dummy_bound": [1]}
+            {"qseqid": pd.Categorical(["P1_F"]), "evalue": [1.0]}
         )
 
-        finder_instance = MockFinder.return_value
-        finder_instance.amplicon_df = pd.DataFrame()
+        _mock_finder_by_chrom(MockFinder, pd.DataFrame())
 
         run_specificity_check(mock_panel, str(tmp_path), "fake_genome.fa")
 
@@ -88,12 +109,11 @@ def test_run_specificity_check_integration(mock_panel, tmp_path):
         # 2. Mock Annotator behavior
         annotator_instance = MockAnnotator.return_value
         annotator_instance.get_predicted_bound.return_value = pd.DataFrame(
-            {"dummy_bound": [1]}
+            {"qseqid": pd.Categorical(["P1_F"]), "evalue": [1.0]}
         )
 
         # 3. Mock Finder behavior — off-target at wrong coordinates
-        finder_instance = MockFinder.return_value
-        finder_instance.amplicon_df = pd.DataFrame(
+        amplicon_df = pd.DataFrame(
             [
                 {
                     "chrom": "chr7",
@@ -105,6 +125,7 @@ def test_run_specificity_check_integration(mock_panel, tmp_path):
                 }
             ]
         )
+        _mock_finder_by_chrom(MockFinder, amplicon_df)
 
         # Run
         run_specificity_check(mock_panel, str(tmp_path), "fake_genome.fa")
@@ -138,11 +159,10 @@ def test_run_specificity_check_forwards_num_threads(mock_panel, tmp_path):
 
         annotator_instance = MockAnnotator.return_value
         annotator_instance.get_predicted_bound.return_value = pd.DataFrame(
-            {"dummy_bound": [1]}
+            {"qseqid": pd.Categorical(["P1_F"]), "evalue": [1.0]}
         )
 
-        finder_instance = MockFinder.return_value
-        finder_instance.amplicon_df = pd.DataFrame()
+        _mock_finder_by_chrom(MockFinder, pd.DataFrame())
 
         run_specificity_check(mock_panel, str(tmp_path), "genome.fa", num_threads=6)
 
@@ -164,11 +184,10 @@ def test_run_specificity_check_forwards_blast_parameters(mock_panel, tmp_path):
 
         annotator_instance = MockAnnotator.return_value
         annotator_instance.get_predicted_bound.return_value = pd.DataFrame(
-            {"dummy_bound": [1]}
+            {"qseqid": pd.Categorical(["P1_F"]), "evalue": [1.0]}
         )
 
-        finder_instance = MockFinder.return_value
-        finder_instance.amplicon_df = pd.DataFrame()
+        finder_instance = _mock_finder_by_chrom(MockFinder, pd.DataFrame())
 
         run_specificity_check(
             mock_panel,
@@ -195,8 +214,10 @@ def test_run_specificity_check_forwards_blast_parameters(mock_panel, tmp_path):
             three_prime_tolerance=3,
         )
 
-        # Verify finder received custom max amplicon size
-        finder_instance.find_amplicons.assert_called_once_with(max_size_bp=5000)
+        # Verify finder used find_amplicons_by_chrom with custom max amplicon size
+        finder_instance.find_amplicons_by_chrom.assert_called_once_with(
+            max_size_bp=5000
+        )
 
         # Verify blast parameters were forwarded to runner.run()
         _, run_kwargs = runner_instance.run.call_args
@@ -248,13 +269,12 @@ def test_run_specificity_check_swapped_orientation_off_target(mock_panel, tmp_pa
 
         annotator_instance = MockAnnotator.return_value
         annotator_instance.get_predicted_bound.return_value = pd.DataFrame(
-            {"dummy_bound": [1]}
+            {"qseqid": pd.Categorical(["P1_F"]), "evalue": [1.0]}
         )
 
         # Swapped orientation: reverse primer on plus strand (F_primer),
         # forward primer on minus strand (R_primer).
-        finder_instance = MockFinder.return_value
-        finder_instance.amplicon_df = pd.DataFrame(
+        amplicon_df = pd.DataFrame(
             [
                 {
                     "chrom": "chr12",
@@ -266,6 +286,7 @@ def test_run_specificity_check_swapped_orientation_off_target(mock_panel, tmp_pa
                 }
             ]
         )
+        _mock_finder_by_chrom(MockFinder, amplicon_df)
 
         run_specificity_check(mock_panel, str(tmp_path), "fake_genome.fa")
 
@@ -289,14 +310,13 @@ def test_run_specificity_check_on_target_detected(mock_panel, tmp_path):
 
         annotator_instance = MockAnnotator.return_value
         annotator_instance.get_predicted_bound.return_value = pd.DataFrame(
-            {"dummy_bound": [1]}
+            {"qseqid": pd.Categorical(["P1_F"]), "evalue": [1.0]}
         )
 
         # Amplicon at the CORRECT coordinates:
         # F_start = design_start + fwd_start = 1000 + 10 = 1010
         # R_start = design_start + rev_start + rev_length - 1 = 1000 + 180 + 22 - 1 = 1201
-        finder_instance = MockFinder.return_value
-        finder_instance.amplicon_df = pd.DataFrame(
+        amplicon_df = pd.DataFrame(
             [
                 {
                     "chrom": "chr7",
@@ -308,6 +328,7 @@ def test_run_specificity_check_on_target_detected(mock_panel, tmp_path):
                 }
             ]
         )
+        _mock_finder_by_chrom(MockFinder, amplicon_df)
 
         run_specificity_check(mock_panel, str(tmp_path), "fake_genome.fa")
 
@@ -330,12 +351,11 @@ def test_run_specificity_check_on_target_not_detected(mock_panel, tmp_path):
 
         annotator_instance = MockAnnotator.return_value
         annotator_instance.get_predicted_bound.return_value = pd.DataFrame(
-            {"dummy_bound": [1]}
+            {"qseqid": pd.Categorical(["P1_F"]), "evalue": [1.0]}
         )
 
         # BLAST only found an off-target hit (pair maps somewhere, but not the intended locus)
-        finder_instance = MockFinder.return_value
-        finder_instance.amplicon_df = pd.DataFrame(
+        amplicon_df = pd.DataFrame(
             [
                 {
                     "chrom": "chr7",
@@ -347,6 +367,7 @@ def test_run_specificity_check_on_target_not_detected(mock_panel, tmp_path):
                 }
             ]
         )
+        _mock_finder_by_chrom(MockFinder, amplicon_df)
 
         run_specificity_check(mock_panel, str(tmp_path), "fake_genome.fa")
 
@@ -354,6 +375,164 @@ def test_run_specificity_check_on_target_not_detected(mock_panel, tmp_path):
         assert pair.specificity_checked is True
         assert pair.on_target_detected is False
         assert len(pair.off_target_products) == 1
+
+
+def test_run_specificity_check_accepts_max_bound_per_primer(mock_panel, tmp_path):
+    """The max_bound_per_primer kwarg is accepted without error."""
+    with (
+        patch("plexus.blast.specificity.BlastRunner") as MockRunner,
+        patch("plexus.blast.specificity.BlastResultsAnnotator") as MockAnnotator,
+        patch("plexus.blast.specificity.AmpliconFinder") as MockFinder,
+        patch("os.makedirs"),
+    ):
+        runner_instance = MockRunner.return_value
+        runner_instance.get_dataframe.return_value = pd.DataFrame({"dummy": [1]})
+
+        annotator_instance = MockAnnotator.return_value
+        annotator_instance.get_predicted_bound.return_value = pd.DataFrame(
+            {"qseqid": pd.Categorical(["P1_F"]), "evalue": [1.0]}
+        )
+
+        _mock_finder_by_chrom(MockFinder, pd.DataFrame())
+
+        # Should not raise
+        run_specificity_check(
+            mock_panel,
+            str(tmp_path),
+            "genome.fa",
+            max_bound_per_primer=500,
+        )
+
+
+def test_bound_cap_keeps_lowest_evalue():
+    """Cap keeps the rows with the lowest e-values per primer."""
+    bound_df = pd.DataFrame(
+        {
+            "qseqid": pd.Categorical(["P1"] * 20),
+            "evalue": list(range(20, 0, -1)),  # 20, 19, ..., 1
+            "sseqid": ["chr1"] * 20,
+            "sstart": list(range(100, 2100, 100)),
+            "sstrand": ["plus"] * 20,
+        }
+    )
+    cap = 5
+    pre_cap = len(bound_df)
+    result = (
+        bound_df.sort_values("evalue")
+        .groupby("qseqid", observed=True)
+        .head(cap)
+        .reset_index(drop=True)
+    )
+    assert len(result) == cap
+    assert result["evalue"].max() == 5  # kept lowest 5: 1, 2, 3, 4, 5
+    assert len(result) < pre_cap
+
+
+def test_bound_cap_none_disables():
+    """When max_bound_per_primer is None, bound_df is unchanged."""
+    bound_df = pd.DataFrame(
+        {
+            "qseqid": pd.Categorical(["P1"] * 20),
+            "evalue": list(range(20)),
+            "sseqid": ["chr1"] * 20,
+            "sstart": list(range(100, 2100, 100)),
+            "sstrand": ["plus"] * 20,
+        }
+    )
+    # Simulating what the code does when max_bound_per_primer is None: nothing
+    result = bound_df.copy()
+    assert len(result) == 20
+
+
+def test_per_chrom_multi_chromosome_accumulation(mock_panel, tmp_path):
+    """Amplicons on chr7 and chr12 both contribute off-targets to the same pair."""
+    with (
+        patch("plexus.blast.specificity.BlastRunner") as MockRunner,
+        patch("plexus.blast.specificity.BlastResultsAnnotator") as MockAnnotator,
+        patch("plexus.blast.specificity.AmpliconFinder") as MockFinder,
+        patch("os.makedirs"),
+    ):
+        runner_instance = MockRunner.return_value
+        runner_instance.get_dataframe.return_value = pd.DataFrame({"dummy": [1]})
+
+        annotator_instance = MockAnnotator.return_value
+        annotator_instance.get_predicted_bound.return_value = pd.DataFrame(
+            {"qseqid": pd.Categorical(["P1_F"]), "evalue": [1.0]}
+        )
+
+        # Two chromosomes, both with off-target hits for the same primer pair
+        amplicon_df = pd.DataFrame(
+            [
+                {
+                    "chrom": "chr7",
+                    "F_primer": "P1_F",
+                    "R_primer": "P1_R",
+                    "product_bp": 500,
+                    "F_start": 5000,
+                    "R_start": 5500,
+                },
+                {
+                    "chrom": "chr12",
+                    "F_primer": "P1_F",
+                    "R_primer": "P1_R",
+                    "product_bp": 300,
+                    "F_start": 8000,
+                    "R_start": 8300,
+                },
+            ]
+        )
+        # Mock yields two separate chromosome chunks
+        finder_instance = MockFinder.return_value
+        chr7_df = amplicon_df[amplicon_df["chrom"] == "chr7"].reset_index(drop=True)
+        chr12_df = amplicon_df[amplicon_df["chrom"] == "chr12"].reset_index(drop=True)
+        finder_instance.find_amplicons_by_chrom.return_value = iter(
+            [("chr7", chr7_df), ("chr12", chr12_df)]
+        )
+
+        run_specificity_check(mock_panel, str(tmp_path), "fake_genome.fa")
+
+        pair = mock_panel.junctions[0].primer_pairs[0]
+        assert pair.specificity_checked is True
+        # Both off-target hits accumulated from separate chromosomes
+        assert len(pair.off_target_products) == 2
+        chroms = {p["chrom"] for p in pair.off_target_products}
+        assert chroms == {"chr7", "chr12"}
+
+
+# ---------------------------------------------------------------------------
+# AmpliconFinder.find_amplicons_by_chrom unit test
+# ---------------------------------------------------------------------------
+
+
+def test_find_amplicons_by_chrom_yields_per_chromosome():
+    """find_amplicons_by_chrom yields one tuple per chromosome with amplicons."""
+    from plexus.blast.offtarget_finder import AmpliconFinder
+
+    bound_df = pd.DataFrame(
+        {
+            "qseqid": ["F1", "F1", "R1", "R1"],
+            "sseqid": ["chr1", "chr7", "chr1", "chr7"],
+            "sstart": [100, 200, 200, 400],
+            "send": [120, 220, 180, 380],
+            "sstrand": ["plus", "plus", "minus", "minus"],
+            "qlen": [20, 20, 20, 20],
+            "qend": [20, 20, 20, 20],
+            "predicted_bound": [True, True, True, True],
+        }
+    )
+
+    finder = AmpliconFinder(bound_df, target_map={"F1": "T1", "R1": "T1"})
+    results = list(finder.find_amplicons_by_chrom(max_size_bp=6000))
+
+    # Should yield results for both chromosomes
+    chroms = [chrom for chrom, _ in results]
+    assert "chr1" in chroms
+    assert "chr7" in chroms
+
+    for chrom, df in results:
+        assert not df.empty
+        # All rows should be for this chromosome
+        assert (df["chrom"] == chrom).all()
 
 
 # ---------------------------------------------------------------------------

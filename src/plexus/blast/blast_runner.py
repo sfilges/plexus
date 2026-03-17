@@ -24,6 +24,23 @@ def _check_blast_tools() -> None:
 
 
 # https://github.com/JasonAHendry/multiply/blob/master/src/multiply/blast/runner.py
+_BLAST_DTYPES = {
+    "pident": "float32",
+    "length": "int32",
+    "mismatch": "int32",
+    "gapopen": "int32",
+    "qstart": "int32",
+    "qend": "int32",
+    "sstart": "int32",  # human genome coords max ~250M, fits int32 (max 2.1B)
+    "send": "int32",
+    "evalue": "float32",
+    "bitscore": "float32",
+    "qlen": "int16",
+}
+
+_BLAST_CATEGORICAL_COLS = ("qseqid", "sseqid", "sstrand")
+
+
 class BlastRunner:
     BLAST_COLS = "qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore sstrand qlen"
 
@@ -205,8 +222,13 @@ class BlastRunner:
 
         # Load as a dataframe
         self.blast_df = pd.read_csv(
-            self.output_table, sep="\t", names=self.BLAST_COLS.split(" ")
+            self.output_table,
+            sep="\t",
+            names=self.BLAST_COLS.split(" "),
+            dtype=_BLAST_DTYPES,
         )
+        for col in _BLAST_CATEGORICAL_COLS:
+            self.blast_df[col] = self.blast_df[col].astype("category")
 
     def get_dataframe(self):
         """

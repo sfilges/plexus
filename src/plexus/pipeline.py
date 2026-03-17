@@ -678,6 +678,7 @@ def run_pipeline(
                         blast_penalty=blast_config.blast_penalty,
                         blast_max_hsps=blast_config.blast_max_hsps,
                         blast_dust=blast_config.blast_dust,
+                        max_bound_per_primer=blast_config.max_bound_per_primer,
                     )
                     result.steps_completed.append("specificity_checked")
                     logger.info("Specificity check complete")

@@ -352,6 +352,18 @@ class BlastParameters(BaseModel):
             "off-target detection."
         ),
     )
+    max_bound_per_primer: int | None = Field(
+        default=10000,
+        ge=100,
+        description=(
+            "Maximum predicted binding sites to retain per primer, ranked by "
+            "lowest e-value. Acts as a safety net against primers in highly "
+            "repetitive regions (e.g. Alu elements) that can cause combinatorial "
+            "explosion in amplicon finding. Normal primers have 700-7000 bound "
+            "sites; only extreme outliers (>10000) are affected. "
+            "Set to None to disable."
+        ),
+    )
     max_amplicon_size: int = Field(
         default=2000,
         ge=100,
