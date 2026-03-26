@@ -183,6 +183,31 @@ class MultiplexPickerParameters(BaseModel):
     plexity_wt_gt: float = Field(default=1.0, ge=0.0)
 
     force_plexity: bool = Field(default=False)
+
+    allow_target_dropping: bool = Field(
+        default=False,
+        description="Allow the DFS selector to drop targets with extreme cross-dimer toxicity.",
+    )
+    dropout_stringency: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Percentile (0-1) of marginal cross-dimer distribution used to set "
+            "the dropout penalty. Higher values = stricter = fewer drops. "
+            "0.8 means only targets worse than the 80th percentile are drop candidates."
+        ),
+    )
+    min_target_fraction: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Minimum fraction of input targets to retain. "
+            "Effective floor = max(minimum_plexity, ceil(min_target_fraction * n_input))."
+        ),
+    )
+
     allow_split_panel: bool = Field(default=False)
     max_splits: int = Field(default=2, ge=1, le=10)
 

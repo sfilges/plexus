@@ -961,6 +961,12 @@ class MultiplexPanel:
                 row = self._build_enriched_pair_row(junction, pair)
                 row["Solution_Rank"] = rank
                 row["Solution_Cost"] = round(solution.cost, 4)
+                row["Num_Dropped"] = len(solution.dropped_targets)
+                row["Dropped_Targets"] = (
+                    "; ".join(solution.dropped_targets)
+                    if solution.dropped_targets
+                    else ""
+                )
                 data.append(row)
 
         df = pd.DataFrame(data)
@@ -1054,6 +1060,9 @@ class MultiplexPanel:
             "num_junctions": len(self.junctions),
             "num_candidate_pairs": total_pairs,
             "num_selected_pairs": len(pipeline_result.selected_pairs),
+            "dropped_targets": pipeline_result.multiplex_solutions[0].dropped_targets
+            if pipeline_result.multiplex_solutions
+            else [],
             "best_multiplex_cost": round(pipeline_result.multiplex_solutions[0].cost, 4)
             if pipeline_result.multiplex_solutions
             else None,

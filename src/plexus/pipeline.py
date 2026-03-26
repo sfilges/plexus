@@ -757,7 +757,28 @@ def run_pipeline(
                         seed=config.multiplex_picker_parameters.selector_seed,
                     )
                     logger.info(f"Using '{selector}' selector algorithm.")
-                    if selector in ("Greedy", "Random"):
+                    if selector == "DFS":
+                        import math as _math
+
+                        mpick = config.multiplex_picker_parameters
+                        n_input_targets = selector_df["target_id"].nunique()
+
+                        # Clamp plexity to actual input count
+                        effective_min = min(mpick.minimum_plexity, n_input_targets)
+                        min_target_floor = min(
+                            max(
+                                effective_min,
+                                _math.ceil(mpick.min_target_fraction * n_input_targets),
+                            ),
+                            n_input_targets,
+                        )
+
+                        solutions = selector_obj.run(
+                            allow_target_dropping=mpick.allow_target_dropping,
+                            min_target_floor=min_target_floor,
+                            stringency=mpick.dropout_stringency,
+                        )
+                    elif selector in ("Greedy", "Random"):
                         solutions = selector_obj.run(
                             N=config.multiplex_picker_parameters.initial_solutions
                         )
@@ -782,6 +803,18 @@ def run_pipeline(
                         logger.info(
                             f"Selected {len(selected)} primer pairs (best cost: {best.cost:.2f})"
                         )
+
+                        if best.dropped_targets:
+                            logger.warning(
+                                f"Dropped {len(best.dropped_targets)} target(s) "
+                                f"due to high interactivity: "
+                                f"{', '.join(best.dropped_targets)}"
+                            )
+                            result.warnings.append(
+                                f"Target dropout: {len(best.dropped_targets)} "
+                                f"target(s) dropped: "
+                                f"{', '.join(best.dropped_targets)}"
+                            )
 
                     result.steps_completed.append("multiplex_optimized")
             except Exception as e:
