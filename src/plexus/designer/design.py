@@ -211,6 +211,17 @@ def design_multiplex_primers(
                 forward_tail=forward_tail,
                 reverse_tail=reverse_tail,
             )
+
+            # Cap candidate pairs per junction to bound the search space
+            max_pairs = pair_params.max_pairs_per_junction
+            if max_pairs is not None and len(junction.primer_pairs) > max_pairs:
+                original_count = len(junction.primer_pairs)
+                junction.primer_pairs.sort(key=lambda p: p.pair_penalty)
+                junction.primer_pairs = junction.primer_pairs[:max_pairs]
+                logger.info(
+                    f"Capped {junction.name} to {max_pairs} pairs "
+                    f"(from {original_count})"
+                )
         except Exception as e:
             logger.warning(
                 f"Primer design failed for junction {junction.name}: {e}. Skipping."
