@@ -77,6 +77,37 @@ MINIMAL_QC = {
             },
         },
     },
+    "primer_dimer_matrix": {
+        "primer_labels": [
+            "GENE_A_forward",
+            "GENE_A_reverse",
+            "GENE_B_forward",
+            "GENE_B_reverse",
+        ],
+        "dimer_threshold": 0.0,
+        "matrix": {
+            "GENE_A_forward": {
+                "GENE_A_reverse": -3.1,
+                "GENE_B_forward": -4.5,
+                "GENE_B_reverse": -5.2,
+            },
+            "GENE_A_reverse": {
+                "GENE_A_forward": -3.1,
+                "GENE_B_forward": -2.8,
+                "GENE_B_reverse": -4.0,
+            },
+            "GENE_B_forward": {
+                "GENE_A_forward": -4.5,
+                "GENE_A_reverse": -2.8,
+                "GENE_B_reverse": -1.5,
+            },
+            "GENE_B_reverse": {
+                "GENE_A_forward": -5.2,
+                "GENE_A_reverse": -4.0,
+                "GENE_B_forward": -1.5,
+            },
+        },
+    },
 }
 
 MINIMAL_SUMMARY = {
@@ -106,13 +137,21 @@ def full_output_dir(qc_output_dir):
         "Forward_Genomic_Start,Forward_Genomic_End,Reverse_Genomic_Start,Reverse_Genomic_End,"
         "Amplicon_Length,Insert_Size,Pair_Penalty,Dimer_Score,Off_Target_Count,"
         "Specificity_Checked,On_Target_Detected,SNP_Count,SNP_Penalty,"
-        "Forward_SNP_Count,Reverse_SNP_Count\n"
+        "Forward_SNP_Count,Reverse_SNP_Count,"
+        "Forward_Self_Any_Th,Reverse_Self_Any_Th,"
+        "Forward_Self_End_Th,Reverse_Self_End_Th,"
+        "Forward_Hairpin_Th,Reverse_Hairpin_Th,"
+        "Forward_End_Stability,Reverse_End_Stability,"
+        "Forward_Penalty,Reverse_Penalty,"
+        "Amplicon_GC,Num_Candidate_Pairs,Cross_Dimer_Contribution\n"
         "GENE_A,chr1,100,100,GENE_A_fwd_rev,ATCG,GCTA,ATCG,GCTA,"
         "59.5,60.5,1.0,80,70,50.0,55.0,20,20,80,99,101,120,80,40,"
-        "100.0,-1.5,0,True,True,0,0.0,0,0\n"
+        "100.0,-1.5,0,True,True,0,0.0,0,0,"
+        "30.0,25.0,20.0,18.0,15.0,12.0,3.5,3.2,0.5,0.6,50.0,5,1.5\n"
         "GENE_B,chr2,200,200,GENE_B_fwd_rev,TTTT,CCCC,TTTT,CCCC,"
         "58.0,62.0,4.0,75,65,35.0,65.0,22,22,180,201,201,222,90,46,"
-        "120.0,-2.0,1,True,True,0,0.0,0,0\n"
+        "120.0,-2.0,1,True,True,0,0.0,0,0,"
+        "32.0,28.0,22.0,20.0,16.0,14.0,3.8,3.4,0.7,0.8,55.0,3,2.0\n"
     )
     (qc_output_dir / "selected_multiplex.csv").write_text(csv)
 
@@ -164,6 +203,12 @@ class TestGenerateHtmlReport:
         html = path.read_text()
         assert "-5.2" in html
         assert "cross_reactivity_matrix" in html or "heatmap" in html.lower()
+
+    def test_html_contains_primer_heatmap(self, qc_output_dir):
+        path = generate_html_report(qc_output_dir)
+        html = path.read_text()
+        assert "primer-heatmap-chart" in html
+        assert "Primer-Level Dimer Heatmap" in html
 
     def test_html_handles_missing_optional_files(self, tmp_path):
         (tmp_path / "panel_qc.json").write_text(json.dumps(MINIMAL_QC))

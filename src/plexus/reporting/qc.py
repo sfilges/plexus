@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import re
 import statistics
 from itertools import combinations
@@ -13,6 +14,11 @@ if TYPE_CHECKING:
     from plexus.designer.multiplexpanel import Junction
 
 
+def _tailed(tail: str, seq: str) -> str:
+    """Prepend tail to sequence, replacing N with A for NN-model compatibility."""
+    return tail.replace("N", "A") + seq
+
+
 def generate_panel_qc(
     junctions: list[Junction],
     *,
@@ -20,6 +26,8 @@ def generate_panel_qc(
     gc_low_threshold: float = 30.0,
     homopolymer_min_run: int = 4,
     dimer_threshold: float = 0.0,
+    forward_tail: str = "",
+    reverse_tail: str = "",
 ) -> dict:
     """Generate panel QC metrics for the selected primer pairs."""
     # Build working lists
@@ -86,55 +94,79 @@ def generate_panel_qc(
         "flagged_primers": flagged_primers,
     }
 
-    # Cross-reactivity matrix
-    predictor = PrimerDimerPredictor()
-    matrix: dict[str, dict] = {}
-    for (jname_a, pair_a), (jname_b, pair_b) in combinations(selected, 2):
-        scores = []
-        for seq_a, name_a, seq_b, name_b in [
-            (
-                pair_a.forward.seq,
-                pair_a.forward.name,
-                pair_b.forward.seq,
-                pair_b.forward.name,
-            ),
-            (
-                pair_a.forward.seq,
-                pair_a.forward.name,
-                pair_b.reverse.seq,
-                pair_b.reverse.name,
-            ),
-            (
-                pair_a.reverse.seq,
-                pair_a.reverse.name,
-                pair_b.forward.seq,
-                pair_b.forward.name,
-            ),
-            (
-                pair_a.reverse.seq,
-                pair_a.reverse.name,
-                pair_b.reverse.seq,
-                pair_b.reverse.name,
-            ),
-        ]:
-            predictor.set_primers(seq_a, seq_b, name_a, name_b)
-            predictor.align()
-            scores.append(predictor.score or 0.0)
+    # --- Primer-level dimer matrix ---
+    # Build list of (label, tailed_sequence) for every primer in the panel.
+    primer_entries = []  # [(label, tailed_seq), ...]
+    primer_labels = []
+    for jname, pair in selected:
+        fwd_label = f"{jname}_forward"
+        rev_label = f"{jname}_reverse"
+        primer_labels.append(fwd_label)
+        primer_labels.append(rev_label)
+        primer_entries.append((fwd_label, _tailed(forward_tail, pair.forward.seq)))
+        primer_entries.append((rev_label, _tailed(reverse_tail, pair.reverse.seq)))
 
+    predictor = PrimerDimerPredictor()
+    primer_matrix: dict[str, dict[str, float]] = {}
+
+    for (label_a, seq_a), (label_b, seq_b) in combinations(primer_entries, 2):
+        predictor.set_primers(seq_a, seq_b, label_a, label_b)
+        predictor.align()
+        score = round(predictor.score or 0.0, 4)
+        primer_matrix.setdefault(label_a, {})[label_b] = score
+        primer_matrix.setdefault(label_b, {})[label_a] = score
+
+    primer_dimer_matrix = {
+        "primer_labels": primer_labels,
+        "dimer_threshold": dimer_threshold,
+        "matrix": primer_matrix,
+    }
+
+    # --- Junction-level cross-reactivity matrix (derived) ---
+    junction_matrix: dict[str, dict] = {}
+    for (jname_a, _pair_a), (jname_b, _pair_b) in combinations(selected, 2):
+        scores = []
+        for d_a in ("forward", "reverse"):
+            for d_b in ("forward", "reverse"):
+                la = f"{jname_a}_{d_a}"
+                lb = f"{jname_b}_{d_b}"
+                scores.append(primer_matrix.get(la, {}).get(lb, 0.0))
         cell = {
             "min_dimer_score": round(min(scores), 4),
             "interaction_count": sum(1 for s in scores if s < dimer_threshold),
         }
-        matrix.setdefault(jname_a, {})[jname_b] = cell
-        matrix.setdefault(jname_b, {})[jname_a] = cell
+        junction_matrix.setdefault(jname_a, {})[jname_b] = cell
+        junction_matrix.setdefault(jname_b, {})[jname_a] = cell
 
     cross_reactivity_matrix = {
         "dimer_threshold": dimer_threshold,
-        "matrix": matrix,
+        "matrix": junction_matrix,
     }
 
     return {
         "tm_distribution": tm_distribution,
         "sequence_flags": sequence_flags,
         "cross_reactivity_matrix": cross_reactivity_matrix,
+        "primer_dimer_matrix": primer_dimer_matrix,
     }
+
+
+def save_primer_dimer_matrix_csv(
+    primer_dimer_data: dict,
+    file_path: str,
+) -> None:
+    """Write the primer-level dimer matrix as a symmetric CSV."""
+    labels = primer_dimer_data["primer_labels"]
+    matrix = primer_dimer_data["matrix"]
+
+    with open(file_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([""] + labels)
+        for label_a in labels:
+            row = [label_a]
+            for label_b in labels:
+                if label_a == label_b:
+                    row.append("")
+                else:
+                    row.append(matrix.get(label_a, {}).get(label_b, ""))
+            writer.writerow(row)

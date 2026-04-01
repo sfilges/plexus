@@ -178,6 +178,15 @@
 <div class="chart-container" id="heatmap-chart"></div>
 {% endif %}
 
+<!-- ====== PRIMER-LEVEL DIMER HEATMAP ====== -->
+{% if qc.primer_dimer_matrix and qc.primer_dimer_matrix.matrix %}
+<h2>Primer-Level Dimer Heatmap</h2>
+<p style="margin-bottom:0.5rem; font-size:0.85rem; color:var(--muted)">
+  Individual primer-to-primer dimer scores. Lower (more negative) = stronger dimer formation.
+</p>
+<div class="chart-container" id="primer-heatmap-chart"></div>
+{% endif %}
+
 <!-- ====== SEQUENCE FLAGS ====== -->
 {% if qc.sequence_flags.flagged_primers %}
 <h2>Sequence Flags</h2>
@@ -276,8 +285,8 @@
   <dl>
     <dt>Run:</dt><dd>{{ provenance.get("run_timestamp", "—") }}</dd>
     {% if provenance.get("completed_at") %}<dt>Completed:</dt><dd>{{ provenance.completed_at }}</dd>{% endif %}
-    <dt>FASTA:</dt><dd>{{ provenance.get("fasta_sha256", "—")[:16] }}&hellip;</dd>
-    {% if provenance.get("snp_vcf_sha256") %}<dt>VCF:</dt><dd>{{ provenance.snp_vcf_sha256[:16] }}&hellip;</dd>{% endif %}
+    <dt>FASTA:</dt><dd>{{ (provenance.get("fasta_sha256") or "—")[:16] }}&hellip;</dd>
+    {% if provenance.get("snp_vcf_sha256") %}<dt>VCF:</dt><dd>{{ (provenance.snp_vcf_sha256 or "—")[:16] }}&hellip;</dd>{% endif %}
     {% if provenance.get("tool_versions") %}
     {% for tool, ver in provenance.tool_versions.items() %}
     <dt>{{ tool }}:</dt><dd>{{ ver }}</dd>
@@ -399,7 +408,7 @@
   }
   {% endif %}
 
-  // --- Cross-Reactivity Heatmap ---
+  // --- Cross-Reactivity Heatmap (Junction-Level) ---
   {% if qc.cross_reactivity_matrix and qc.cross_reactivity_matrix.matrix %}
   var matrix = qc.cross_reactivity_matrix.matrix;
   var labels = Object.keys(matrix);
@@ -448,6 +457,61 @@
       yaxis: {autorange: "reversed"},
       margin: {b: 100, t: 30, l: 100, r: 30},
       height: Math.max(400, labels.length * 35 + 150)
+    }, config);
+  }
+  {% endif %}
+
+  // --- Primer-Level Dimer Heatmap ---
+  {% if qc.primer_dimer_matrix and qc.primer_dimer_matrix.matrix %}
+  var pMatrix = qc.primer_dimer_matrix.matrix;
+  var pLabels = qc.primer_dimer_matrix.primer_labels;
+  if (pLabels && pLabels.length > 1) {
+    var pz = [];
+    var pHover = [];
+    for (var i = 0; i < pLabels.length; i++) {
+      var pRow = [];
+      var phRow = [];
+      for (var j = 0; j < pLabels.length; j++) {
+        if (i === j) {
+          pRow.push(null);
+          phRow.push(pLabels[i] + " (self)");
+        } else {
+          var score = (pMatrix[pLabels[i]] || {})[pLabels[j]];
+          if (score !== undefined && score !== null) {
+            pRow.push(score);
+            phRow.push(pLabels[i] + " vs " + pLabels[j] + "<br>Score: " + score);
+          } else {
+            pRow.push(null);
+            phRow.push("N/A");
+          }
+        }
+      }
+      pz.push(pRow);
+      pHover.push(phRow);
+    }
+
+    // Short labels: gene_direction → gene (F/R)
+    var pShort = pLabels.map(function(l) {
+      var last = l.lastIndexOf("_");
+      var gene = l.substring(0, last);
+      var dir = l.substring(last + 1);
+      return gene + " (" + dir.charAt(0).toUpperCase() + ")";
+    });
+
+    Plotly.newPlot("primer-heatmap-chart", [{
+      z: pz, x: pShort, y: pShort,
+      type: "heatmap",
+      colorscale: [[0, "#dc2626"], [0.5, "#fbbf24"], [1, "#ffffff"]],
+      zmin: -12, zmax: 0,
+      hoverongaps: false,
+      text: pHover,
+      hoverinfo: "text",
+      colorbar: {title: "Dimer Score", titleside: "right"}
+    }], {
+      xaxis: {tickangle: -45, side: "bottom"},
+      yaxis: {autorange: "reversed"},
+      margin: {b: 140, t: 30, l: 140, r: 30},
+      height: Math.max(500, pLabels.length * 25 + 200)
     }, config);
   }
   {% endif %}

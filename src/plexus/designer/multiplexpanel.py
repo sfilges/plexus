@@ -833,6 +833,20 @@ class MultiplexPanel:
                     "Off_Target_Count": len(pair.off_target_products),
                     "Specificity_Checked": pair.specificity_checked,
                     "Selected": pair.selected,
+                    "Forward_Self_Any_Th": pair.forward.self_any_th,
+                    "Reverse_Self_Any_Th": pair.reverse.self_any_th,
+                    "Forward_Self_End_Th": pair.forward.self_end_th,
+                    "Reverse_Self_End_Th": pair.reverse.self_end_th,
+                    "Forward_Hairpin_Th": pair.forward.hairpin_th,
+                    "Reverse_Hairpin_Th": pair.reverse.hairpin_th,
+                    "Forward_End_Stability": pair.forward.end_stability,
+                    "Reverse_End_Stability": pair.reverse.end_stability,
+                    "Forward_Penalty": pair.forward.penalty,
+                    "Reverse_Penalty": pair.reverse.penalty,
+                    "Amplicon_GC": pair.amplicon_gc,
+                    "Num_Candidate_Pairs": (
+                        len(junction.primer_pairs) if junction.primer_pairs else 0
+                    ),
                 }
                 data.append(row)
 
@@ -901,6 +915,20 @@ class MultiplexPanel:
             "SNP_Penalty": pair.snp_penalty,
             "Forward_SNP_Count": pair.forward.snp_count,
             "Reverse_SNP_Count": pair.reverse.snp_count,
+            "Forward_Self_Any_Th": pair.forward.self_any_th,
+            "Reverse_Self_Any_Th": pair.reverse.self_any_th,
+            "Forward_Self_End_Th": pair.forward.self_end_th,
+            "Reverse_Self_End_Th": pair.reverse.self_end_th,
+            "Forward_Hairpin_Th": pair.forward.hairpin_th,
+            "Reverse_Hairpin_Th": pair.reverse.hairpin_th,
+            "Forward_End_Stability": pair.forward.end_stability,
+            "Reverse_End_Stability": pair.reverse.end_stability,
+            "Forward_Penalty": pair.forward.penalty,
+            "Reverse_Penalty": pair.reverse.penalty,
+            "Amplicon_GC": pair.amplicon_gc,
+            "Num_Candidate_Pairs": (
+                len(junction.primer_pairs) if junction.primer_pairs else 0
+            ),
         }
 
     def _junction_for_pair(self, pair: PrimerPair) -> Junction | None:
@@ -924,13 +952,41 @@ class MultiplexPanel:
             logger.warning("No selected pairs to save.")
             return
 
+        # Pre-compute cross-dimer scores for per-pair attribution
+        dimer_predictor = PrimerDimerPredictor()
+        dimer_cache: dict[tuple[str, str], float] = {}
+        all_primers: dict[str, list[tuple[str, str]]] = {}
+        for pair in selected_pairs:
+            all_primers[pair.pair_id] = [
+                (pair.forward.seq, pair.forward.name),
+                (pair.reverse.seq, pair.reverse.name),
+            ]
+
         data = []
         for pair in selected_pairs:
             junction = self._junction_for_pair(pair)
             if junction is None:
                 logger.warning(f"Could not find junction for pair {pair.pair_id}")
                 continue
-            data.append(self._build_enriched_pair_row(junction, pair))
+            row = self._build_enriched_pair_row(junction, pair)
+
+            contribution = 0.0
+            for other in selected_pairs:
+                if other.pair_id == pair.pair_id:
+                    continue
+                for seq_a, name_a in all_primers[pair.pair_id]:
+                    for seq_b, name_b in all_primers[other.pair_id]:
+                        key = tuple(sorted((seq_a, seq_b)))
+                        if key not in dimer_cache:
+                            dimer_predictor.set_primers(seq_a, seq_b, name_a, name_b)
+                            dimer_predictor.align()
+                            dimer_cache[key] = dimer_predictor.score or 0.0
+                        score = dimer_cache[key]
+                        if score < 0:
+                            contribution += abs(score)
+            row["Cross_Dimer_Contribution"] = round(contribution, 4)
+
+            data.append(row)
 
         df = pd.DataFrame(data)
         df.to_csv(file_path, index=False)
@@ -948,17 +1004,48 @@ class MultiplexPanel:
             return
 
         pair_lookup = self.build_pair_lookup()
+        dimer_predictor = PrimerDimerPredictor()
+        dimer_cache: dict[tuple[str, str], float] = {}
         data = []
 
         for rank, solution in enumerate(solutions, start=1):
+            # Collect primers for this solution's pairs
+            sol_primers: dict[str, list[tuple[str, str]]] = {}
+            sol_pairs: list[PrimerPair] = []
             for pair_id in solution.primer_pairs:
                 pair = pair_lookup.get(pair_id)
                 if pair is None:
                     continue
+                sol_pairs.append(pair)
+                sol_primers[pair_id] = [
+                    (pair.forward.seq, pair.forward.name),
+                    (pair.reverse.seq, pair.reverse.name),
+                ]
+
+            for pair in sol_pairs:
                 junction = self._junction_for_pair(pair)
                 if junction is None:
                     continue
                 row = self._build_enriched_pair_row(junction, pair)
+
+                contribution = 0.0
+                for other in sol_pairs:
+                    if other.pair_id == pair.pair_id:
+                        continue
+                    for seq_a, name_a in sol_primers[pair.pair_id]:
+                        for seq_b, name_b in sol_primers[other.pair_id]:
+                            key = tuple(sorted((seq_a, seq_b)))
+                            if key not in dimer_cache:
+                                dimer_predictor.set_primers(
+                                    seq_a, seq_b, name_a, name_b
+                                )
+                                dimer_predictor.align()
+                                dimer_cache[key] = dimer_predictor.score or 0.0
+                            score = dimer_cache[key]
+                            if score < 0:
+                                contribution += abs(score)
+                row["Cross_Dimer_Contribution"] = round(contribution, 4)
+
                 row["Solution_Rank"] = rank
                 row["Solution_Cost"] = round(solution.cost, 4)
                 row["Num_Dropped"] = len(solution.dropped_targets)

@@ -852,13 +852,37 @@ def run_pipeline(
                 # Panel QC report (REPT-01)
                 if result.selected_pairs:
                     try:
-                        from plexus.reporting.qc import generate_panel_qc
+                        from plexus.reporting.qc import (
+                            generate_panel_qc,
+                            save_primer_dimer_matrix_csv,
+                        )
 
-                        qc_data = generate_panel_qc(panel.junctions)
+                        fwd_tail = (
+                            panel.config.singleplex_design_parameters.forward_tail
+                            if panel.config
+                            else ""
+                        )
+                        rev_tail = (
+                            panel.config.singleplex_design_parameters.reverse_tail
+                            if panel.config
+                            else ""
+                        )
+                        qc_data = generate_panel_qc(
+                            panel.junctions,
+                            forward_tail=fwd_tail,
+                            reverse_tail=rev_tail,
+                        )
                         qc_path = output_dir / "panel_qc.json"
                         with qc_path.open("w") as f:
                             _json.dump(qc_data, f, indent=2)
                         logger.info(f"Wrote panel QC report to {qc_path.name}")
+
+                        if qc_data.get("primer_dimer_matrix"):
+                            csv_path = output_dir / "primer_dimer_matrix.csv"
+                            save_primer_dimer_matrix_csv(
+                                qc_data["primer_dimer_matrix"], str(csv_path)
+                            )
+                            logger.info(f"Wrote primer dimer matrix to {csv_path.name}")
                     except Exception as e:
                         logger.warning(f"Could not write panel QC report: {e}")
                         result.errors.append(f"Panel QC report failed: {e}")
