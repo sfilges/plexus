@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 26-03-2026
+
+### Added
+
+- **Enriched CSV output for post hoc analysis** (`designer/multiplexpanel.py`, `designer/primer.py`): `selected_multiplex.csv`, `top_panels.csv`, and `candidate_pairs.csv` now include 12 additional per-primer and per-amplicon columns: `Forward/Reverse_Self_Any_Th`, `Forward/Reverse_Self_End_Th`, `Forward/Reverse_Hairpin_Th`, `Forward/Reverse_End_Stability`, `Forward/Reverse_Penalty`, `Amplicon_GC`, and `Num_Candidate_Pairs`. These expose design-time thermodynamic features needed to correlate primer properties with wet-lab validation coverage.
+- **Per-assay cross-dimer contribution** (`designer/multiplexpanel.py`): `selected_multiplex.csv` and `top_panels.csv` now include a `Cross_Dimer_Contribution` column quantifying the sum of cross-dimer interaction scores between each assay's primers and all other primers in the multiplex. Mirrors the scoring logic in `selector/cost.py` with cached pairwise alignments.
+
+- **Primer-level cross-dimer matrix** (`reporting/qc.py`): `generate_panel_qc()` now computes a full primer-to-primer dimer matrix for the selected multiplex, covering all C(2n, 2) individual primer interactions (including intra-junction pairs). The matrix is returned alongside the existing junction-level summary. Tail sequences (`forward_tail`, `reverse_tail`) are now included in the dimer alignment for realistic scoring. A new `save_primer_dimer_matrix_csv()` function exports the symmetric matrix as a CSV file (`primer_dimer_matrix.csv`), written automatically by the pipeline.
+- **Primer-level dimer heatmap in HTML report** (`reporting/templates/panel_report.html.j2`): New interactive Plotly heatmap section showing individual primer-to-primer dimer scores, displayed below the existing junction-level heatmap.
+
+### Fixed
+
+- **Cross-reactivity heatmap not rendering** (`reporting/templates/plotly.min.js.gz`): The bundled Plotly.js was the "basic" partial build which only includes scatter, bar, and pie trace types. The heatmap trace type was missing, causing the cross-reactivity heatmap to silently fail. Replaced with the full Plotly.js v2.35.2 bundle.
+
+- **Target dropout for DFS selector** (`selector/selectors.py`): The DFS selector can now optionally drop targets whose primers cause extreme cross-dimer interactions that "poison" the panel. Enabled via `allow_target_dropping: true` in the multiplex picker config. An adaptive dropout penalty is computed from the greedy seed's marginal cross-dimer costs at a configurable percentile (`dropout_stringency`, default 0.8), so only true outliers are removed. A hard floor prevents excessive dropping: `max(minimum_plexity, ceil(min_target_fraction * n_input))`, clamped to the actual input count.
+- **New config fields** (`config.py`, preset JSON files): `allow_target_dropping` (bool, default false), `dropout_stringency` (float 0-1, default 0.8), `min_target_fraction` (float 0-1, default 0.8).
+- **Dropped targets in output** (`designer/multiplexpanel.py`): `panel_summary.json` includes a `dropped_targets` list. `top_panels.csv` includes `Num_Dropped` and `Dropped_Targets` columns. Dropped targets are also logged as warnings and surfaced in CLI output.
+- **Plexity clamping** (`pipeline.py`): When the number of input targets is less than the configured `maximum_plexity` or `minimum_plexity`, the effective plexity values are clamped to the actual input count, preventing nonsensical constraints.
+
 ## [1.1.0] - 13-03-2026
 
 ### Changed

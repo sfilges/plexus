@@ -71,6 +71,15 @@ class PrimerPair:
     snp_count: int = 0
     snp_penalty: float = 0.0
 
+    @property
+    def amplicon_gc(self) -> float | None:
+        """GC content of the amplicon sequence as a percentage."""
+        seq = self.amplicon_sequence
+        if not seq:
+            return None
+        gc_count = seq.upper().count("G") + seq.upper().count("C")
+        return round(100.0 * gc_count / len(seq), 2)
+
     @staticmethod
     def calculate_primer_pair_penalty_th(
         primer_left_penalty,

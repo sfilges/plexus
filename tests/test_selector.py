@@ -329,3 +329,148 @@ class TestMultiplexCostFunction:
             cost_fn = MultiplexCostFunction(pair_lookup, config)
 
         assert cost_fn.calc_cost(["weighted"]) == pytest.approx(0.0)
+
+
+# ================================================================================
+# Tests for DFS target dropout
+# ================================================================================
+
+
+class TestDFSTargetDropout:
+    def test_dropout_disabled_unchanged(self, selector_inputs):
+        """allow_target_dropping=False produces identical results to default."""
+        df, cost_fn = selector_inputs
+        results_default = DepthFirstSearch(df, cost_fn).run(seed_with_greedy=False)
+        results_nodrop = DepthFirstSearch(df, cost_fn).run(
+            seed_with_greedy=False, allow_target_dropping=False
+        )
+        assert len(results_default) == len(results_nodrop)
+        for m_def, m_nod in zip(
+            sorted(results_default, key=lambda m: str(m.primer_pairs)),
+            sorted(results_nodrop, key=lambda m: str(m.primer_pairs)),
+            strict=False,
+        ):
+            assert m_def.primer_pairs == m_nod.primer_pairs
+            assert m_def.dropped_targets == []
+            assert m_nod.dropped_targets == []
+
+    def test_drops_toxic_target(self):
+        """DFS drops a target whose inclusion dramatically increases cost."""
+        df = pd.DataFrame(
+            {
+                "target_id": ["T1", "T1", "T2", "T2", "T3", "T3"],
+                "pair_name": ["P1a", "P1b", "P2a", "P2b", "P3a", "P3b"],
+            }
+        )
+
+        def toxic_cost(pairs):
+            base = len(pairs) * 0.1
+            if any(p.startswith("P3") for p in pairs):
+                base += 100.0
+            return base
+
+        cost_fn = MagicMock()
+        cost_fn.calc_cost = toxic_cost
+
+        results = DepthFirstSearch(df, cost_fn).run(
+            seed_with_greedy=False,
+            allow_target_dropping=True,
+            dropout_penalty=5.0,
+            min_target_floor=2,
+        )
+        best = min(results, key=lambda m: m.cost)
+        # Best solution should drop T3 (cost 100) for penalty of 5
+        assert len(best.primer_pairs) == 2
+        assert "T3" in best.dropped_targets
+
+    def test_min_target_floor_enforced(self):
+        """Cannot drop below min_target_floor."""
+        df = pd.DataFrame(
+            {
+                "target_id": ["T1", "T2", "T3"],
+                "pair_name": ["P1", "P2", "P3"],
+            }
+        )
+        cost_fn = MagicMock()
+        cost_fn.calc_cost = MagicMock(return_value=1.0)
+
+        results = DepthFirstSearch(df, cost_fn).run(
+            seed_with_greedy=False,
+            allow_target_dropping=True,
+            dropout_penalty=0.01,
+            min_target_floor=3,
+        )
+        for m in results:
+            assert len(m.dropped_targets) == 0
+            assert len(m.primer_pairs) == 3
+
+    def test_multiplex_dropped_targets_default(self):
+        """Multiplex backward compat: dropped_targets defaults to []."""
+        m = Multiplex()
+        assert m.dropped_targets == []
+        m2 = Multiplex(cost=1.0, primer_pairs=["P1"])
+        assert m2.dropped_targets == []
+
+    def test_solutions_include_both_dropped_and_full(self):
+        """Solutions buffer contains both full and reduced panels."""
+        df = pd.DataFrame(
+            {
+                "target_id": ["T1", "T2", "T3"],
+                "pair_name": ["P1", "P2", "P3"],
+            }
+        )
+
+        def mild_cost(pairs):
+            base = len(pairs) * 1.0
+            if any(p == "P3" for p in pairs):
+                base += 2.0
+            return base
+
+        cost_fn = MagicMock()
+        cost_fn.calc_cost = mild_cost
+
+        results = DepthFirstSearch(df, cost_fn).run(
+            seed_with_greedy=False,
+            allow_target_dropping=True,
+            dropout_penalty=1.5,
+            min_target_floor=2,
+            store_maximum=200,
+        )
+        # Should have solutions with 3 targets AND solutions with 2 targets
+        full_solutions = [m for m in results if len(m.dropped_targets) == 0]
+        dropped_solutions = [m for m in results if len(m.dropped_targets) > 0]
+        assert len(full_solutions) > 0
+        assert len(dropped_solutions) > 0
+
+    def test_adaptive_penalty_computation(self):
+        """Verify _compute_dropout_penalty returns reasonable value."""
+        df = pd.DataFrame(
+            {
+                "target_id": ["T1", "T2", "T3"],
+                "pair_name": ["P1", "P2", "P3"],
+            }
+        )
+
+        # Cost function where T3 contributes most of the cost
+        def cost_with_t3_toxic(pairs):
+            base = len(pairs) * 0.5
+            if "P3" in pairs:
+                base += 10.0
+            return base
+
+        cost_fn = MagicMock()
+        cost_fn.calc_cost = cost_with_t3_toxic
+
+        dfs = DepthFirstSearch(df, cost_fn)
+        pair_to_target = {"P1": "T1", "P2": "T2", "P3": "T3"}
+        ordered_targets = ["T1", "T2", "T3"]
+        greedy_sol = Multiplex(primer_pairs=["P1", "P2", "P3"], cost=11.5)
+
+        penalty = dfs._compute_dropout_penalty(
+            pair_to_target, ordered_targets, greedy_sol, stringency=0.5
+        )
+        # T1 and T2 marginal costs are ~0.5 each (just their individual contribution)
+        # T3 marginal cost is ~10.5 (the toxic contribution)
+        # Sorted: [~0.5, ~0.5, ~10.5]. At stringency=0.5, idx=1 -> ~0.5
+        assert penalty > 0
+        assert penalty < 10.0  # should not be at the toxic level with stringency=0.5

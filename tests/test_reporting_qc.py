@@ -221,3 +221,125 @@ def test_only_selected_pairs_used():
     assert "R_sel" in names
     assert "F_no" not in names
     assert "R_no" not in names
+
+
+# ---------------------------------------------------------------------------
+# Primer-level dimer matrix
+# ---------------------------------------------------------------------------
+
+
+def test_primer_dimer_matrix_basic():
+    pair_a = _make_pair("FA", "ACGTACGT", 60.0, 50.0, "RA", "TGCATGCA", 60.0, 50.0)
+    pair_b = _make_pair("FB", "CCCCGGGG", 60.0, 75.0, "RB", "GGGGCCCC", 60.0, 75.0)
+    junc_a = _make_junction("JA", [pair_a])
+    junc_b = _make_junction("JB", [pair_b])
+    result = generate_panel_qc([junc_a, junc_b])
+    pdm = result["primer_dimer_matrix"]
+    assert len(pdm["primer_labels"]) == 4
+    matrix = pdm["matrix"]
+    # All 6 unique pairs should have scores (C(4,2) = 6)
+    all_scores = []
+    for la in pdm["primer_labels"]:
+        for lb in pdm["primer_labels"]:
+            if la != lb:
+                assert lb in matrix.get(la, {}), f"Missing {la} vs {lb}"
+                all_scores.append(matrix[la][lb])
+    assert len(all_scores) == 12  # 4*3 entries (symmetric)
+
+
+def test_primer_dimer_matrix_symmetric():
+    pair_a = _make_pair("FA", "ACGTACGT", 60.0, 50.0, "RA", "TGCATGCA", 60.0, 50.0)
+    pair_b = _make_pair("FB", "CCCCGGGG", 60.0, 75.0, "RB", "GGGGCCCC", 60.0, 75.0)
+    junc_a = _make_junction("JA", [pair_a])
+    junc_b = _make_junction("JB", [pair_b])
+    result = generate_panel_qc([junc_a, junc_b])
+    matrix = result["primer_dimer_matrix"]["matrix"]
+    for la in matrix:
+        for lb in matrix[la]:
+            assert matrix[la][lb] == matrix[lb][la], f"Asymmetric: {la} vs {lb}"
+
+
+def test_primer_dimer_matrix_labels_format():
+    pair = _make_pair("F1", "ACGTACGT", 60.0, 50.0, "R1", "TGCATGCA", 60.0, 50.0)
+    junc = _make_junction("KRAS", [pair])
+    result = generate_panel_qc([junc])
+    labels = result["primer_dimer_matrix"]["primer_labels"]
+    assert labels == ["KRAS_forward", "KRAS_reverse"]
+
+
+def test_primer_dimer_matrix_single_junction():
+    """Single junction should still have F vs R score."""
+    pair = _make_pair("F1", "ACGTACGT", 60.0, 50.0, "R1", "TGCATGCA", 60.0, 50.0)
+    junc = _make_junction("J1", [pair])
+    result = generate_panel_qc([junc])
+    pdm = result["primer_dimer_matrix"]
+    assert len(pdm["primer_labels"]) == 2
+    matrix = pdm["matrix"]
+    assert "J1_reverse" in matrix.get("J1_forward", {})
+    assert "J1_forward" in matrix.get("J1_reverse", {})
+
+
+def test_primer_dimer_matrix_empty():
+    result = generate_panel_qc([])
+    pdm = result["primer_dimer_matrix"]
+    assert pdm["primer_labels"] == []
+    assert pdm["matrix"] == {}
+
+
+def test_primer_dimer_matrix_with_tails():
+    """Scores should differ when tail sequences are provided."""
+    pair_a = _make_pair(
+        "FA", "ACGTACGTACGT", 60.0, 50.0, "RA", "TGCATGCATGCA", 60.0, 50.0
+    )
+    pair_b = _make_pair(
+        "FB", "CCCCGGGGCCCC", 60.0, 75.0, "RB", "GGGGCCCCGGGG", 60.0, 75.0
+    )
+    junc_a = _make_junction("JA", [pair_a])
+    junc_b = _make_junction("JB", [pair_b])
+
+    result_bare = generate_panel_qc([junc_a, junc_b])
+    result_tailed = generate_panel_qc(
+        [junc_a, junc_b],
+        forward_tail="GGACACTCTTTCCCTACACGAC",
+        reverse_tail="GTGACTGGAGTTCAGACGTGT",
+    )
+
+    bare_matrix = result_bare["primer_dimer_matrix"]["matrix"]
+    tailed_matrix = result_tailed["primer_dimer_matrix"]["matrix"]
+    # At least one score should differ
+    diffs = 0
+    for la in bare_matrix:
+        for lb in bare_matrix[la]:
+            if bare_matrix[la][lb] != tailed_matrix[la][lb]:
+                diffs += 1
+    assert diffs > 0
+
+
+def test_save_primer_dimer_matrix_csv(tmp_path):
+    from plexus.reporting.qc import save_primer_dimer_matrix_csv
+
+    pair_a = _make_pair("FA", "ACGTACGT", 60.0, 50.0, "RA", "TGCATGCA", 60.0, 50.0)
+    pair_b = _make_pair("FB", "CCCCGGGG", 60.0, 75.0, "RB", "GGGGCCCC", 60.0, 75.0)
+    junc_a = _make_junction("JA", [pair_a])
+    junc_b = _make_junction("JB", [pair_b])
+    result = generate_panel_qc([junc_a, junc_b])
+
+    csv_path = str(tmp_path / "dimer_matrix.csv")
+    save_primer_dimer_matrix_csv(result["primer_dimer_matrix"], csv_path)
+
+    import csv
+
+    with open(csv_path, newline="") as f:
+        reader = csv.reader(f)
+        rows = list(reader)
+
+    # Header row + 4 data rows
+    assert len(rows) == 5
+    # Header: empty + 4 labels
+    assert len(rows[0]) == 5
+    assert rows[0][0] == ""
+    # Diagonal should be empty
+    for i in range(1, 5):
+        assert rows[i][i] == ""
+    # Off-diagonal should be numeric
+    assert float(rows[1][2]) != 0 or rows[1][2] != ""

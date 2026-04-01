@@ -308,6 +308,11 @@ class DepthFirstSearch(MultiplexSelector):
     whose partial cost plus a lower-bound on remaining cost exceeds the
     best known solution.
 
+    Supports optional **target dropout**: when ``allow_target_dropping=True``,
+    each target may be skipped at the cost of a per-drop penalty.  Only
+    targets whose cross-dimer contribution exceeds the adaptive penalty
+    threshold will be dropped.  A hard floor (``min_target_floor``) prevents
+    excessive dropping.
     """
 
     def run(
@@ -317,11 +322,22 @@ class DepthFirstSearch(MultiplexSelector):
         greedy_seed_iterations=100,
         max_nodes=10_000_000,
         target_ordering="ascending_candidates",
+        # Target dropout parameters
+        allow_target_dropping=False,
+        dropout_penalty=None,
+        min_target_floor=None,
+        stringency=0.8,
     ):
         target_pairs = {
             target_id: list(set(target_df["pair_name"]))
             for target_id, target_df in self.primer_df.groupby("target_id")
         }
+
+        # Reverse lookup: pair_id -> target_id
+        pair_to_target = {}
+        for target_id, target_df in self.primer_df.groupby("target_id"):
+            for pair_name in set(target_df["pair_name"]):
+                pair_to_target[pair_name] = target_id
 
         # Order targets
         if target_ordering == "ascending_candidates":
@@ -341,21 +357,61 @@ class DepthFirstSearch(MultiplexSelector):
             sorted_candidates[tid] = [p for p, _ in pair_costs]
             min_individual_cost[tid] = pair_costs[0][1]
 
-        # Precompute suffix sums of minimum individual costs for lower bounds
-        suffix_min = [0.0] * (n_targets + 1)
-        for i in range(n_targets - 1, -1, -1):
-            suffix_min[i] = suffix_min[i + 1] + min_individual_cost[ordered_targets[i]]
+        # Dropout budget
+        if allow_target_dropping:
+            if min_target_floor is None:
+                min_target_floor = n_targets
+            max_drops = max(0, n_targets - min_target_floor)
+        else:
+            max_drops = 0
+            min_target_floor = n_targets
+
+        # Precompute suffix lower-bound data structures.
+        # suffix_prefix_sums[d] = prefix sums of sorted min_individual_costs
+        # for targets at depths d..n_targets-1.  Used to compute the tightest
+        # lower bound given a remaining drop budget.
+        suffix_prefix_sums: list[list[float]] = []
+        for d in range(n_targets + 1):
+            costs = sorted(
+                min_individual_cost[ordered_targets[i]] for i in range(d, n_targets)
+            )
+            ps = [0.0]
+            for c in costs:
+                ps.append(ps[-1] + c)
+            suffix_prefix_sums.append(ps)
 
         # Optionally seed best_known_cost from greedy
         best_known_cost = float("inf")
+        greedy_results = []
         if seed_with_greedy:
             greedy = GreedySearch(self.primer_df, self.cost_function)
             greedy_results = greedy.run(N=greedy_seed_iterations)
             if greedy_results:
                 best_known_cost = min(m.cost for m in greedy_results)
 
+        # Compute adaptive dropout penalty from greedy seed
+        if allow_target_dropping and max_drops > 0:
+            if dropout_penalty is None:
+                if greedy_results:
+                    best_greedy = min(greedy_results, key=lambda m: m.cost)
+                    dropout_penalty = self._compute_dropout_penalty(
+                        pair_to_target, ordered_targets, best_greedy, stringency
+                    )
+                    logger.info(
+                        f"Adaptive dropout penalty: {dropout_penalty:.4f} "
+                        f"(stringency={stringency}, max_drops={max_drops})"
+                    )
+                else:
+                    dropout_penalty = 1.0
+                    logger.warning(
+                        "No greedy seed for adaptive penalty; using fallback=1.0"
+                    )
+        else:
+            if dropout_penalty is None:
+                dropout_penalty = 0.0
+
         # Iterative DFS with explicit stack
-        # Stack entries: (depth, assignment_list, partial_cost)
+        # Stack entries: (depth, included_pairs, dropped_indices)
         stored_multiplexes = []
         stored_costs = []
         nodes_visited = 0
@@ -365,14 +421,16 @@ class DepthFirstSearch(MultiplexSelector):
         )
         logger.info(
             f"Running DFS over {n_targets} targets ({total_combos} total combinations), "
-            f"max_nodes={max_nodes}..."
+            f"max_nodes={max_nodes}, max_drops={max_drops}..."
         )
 
         # Push initial candidates for depth 0 in reverse order (cheapest first via LIFO)
-        stack = []
+        stack: list[tuple[int, list[str], frozenset[int]]] = []
         tid0 = ordered_targets[0]
         for candidate in reversed(sorted_candidates[tid0]):
-            stack.append((0, [candidate]))
+            stack.append((0, [candidate], frozenset()))
+        if max_drops > 0:
+            stack.append((0, [], frozenset({0})))
 
         while stack:
             if nodes_visited >= max_nodes:
@@ -381,45 +439,119 @@ class DepthFirstSearch(MultiplexSelector):
                 )
                 break
 
-            depth, assignment = stack.pop()
+            depth, included_pairs, dropped_indices = stack.pop()
             nodes_visited += 1
+            n_dropped = len(dropped_indices)
 
-            partial_cost = self.cost_function.calc_cost(assignment)
+            # Cost = base cost of included pairs + penalty per drop
+            partial_cost = (
+                self.cost_function.calc_cost(included_pairs)
+                + n_dropped * dropout_penalty
+            )
 
-            # Prune: if buffer is full, check lower bound
+            n_remaining = n_targets - (depth + 1)
+            n_included = len(included_pairs)
+
+            # Feasibility prune: can we still reach min_target_floor?
+            if n_included + n_remaining < min_target_floor:
+                continue
+
+            # Cost prune
             if len(stored_multiplexes) >= store_maximum:
-                lower_bound = partial_cost + suffix_min[depth + 1]
-                if lower_bound >= best_known_cost:
+                remaining_budget = min(max_drops - n_dropped, n_remaining)
+                n_must_keep = n_remaining - remaining_budget
+                lb_include = suffix_prefix_sums[depth + 1][n_must_keep]
+                lb_drop = remaining_budget * dropout_penalty
+                if partial_cost + lb_include + lb_drop >= best_known_cost:
                     continue
 
             # Complete solution
             if depth + 1 == n_targets:
+                if n_included < min_target_floor:
+                    continue
+
+                dropped_target_ids = [
+                    ordered_targets[i] for i in sorted(dropped_indices)
+                ]
+                mx = Multiplex(
+                    cost=partial_cost,
+                    primer_pairs=list(included_pairs),
+                    dropped_targets=dropped_target_ids,
+                )
+
                 if len(stored_multiplexes) < store_maximum:
-                    stored_multiplexes.append(
-                        Multiplex(cost=partial_cost, primer_pairs=list(assignment))
-                    )
+                    stored_multiplexes.append(mx)
                     stored_costs.append(partial_cost)
                     if partial_cost < best_known_cost:
                         best_known_cost = partial_cost
                 elif partial_cost < max(stored_costs):
                     worst_idx = stored_costs.index(max(stored_costs))
-                    stored_multiplexes[worst_idx] = Multiplex(
-                        cost=partial_cost, primer_pairs=list(assignment)
-                    )
+                    stored_multiplexes[worst_idx] = mx
                     stored_costs[worst_idx] = partial_cost
                     best_known_cost = min(best_known_cost, partial_cost)
                 continue
 
             # Expand next level — push in reverse so cheapest is popped first
-            next_tid = ordered_targets[depth + 1]
+            next_depth = depth + 1
+            next_tid = ordered_targets[next_depth]
             for candidate in reversed(sorted_candidates[next_tid]):
-                stack.append((depth + 1, assignment + [candidate]))
+                stack.append(
+                    (next_depth, included_pairs + [candidate], dropped_indices)
+                )
+            # SKIP branch: drop this target if budget allows
+            if max_drops > 0 and n_dropped < max_drops:
+                stack.append(
+                    (next_depth, list(included_pairs), dropped_indices | {next_depth})
+                )
 
         logger.info(
             f"DFS complete. Visited {nodes_visited} nodes, "
             f"stored {len(stored_multiplexes)} solutions."
         )
         return stored_multiplexes
+
+    def _compute_dropout_penalty(
+        self,
+        pair_to_target: dict[str, str],
+        ordered_targets: list[str],
+        greedy_solution: Multiplex,
+        stringency: float,
+    ) -> float:
+        """Compute adaptive dropout penalty from greedy seed's marginal cross-dimer costs.
+
+        For each target, the marginal cost is the difference in total panel cost
+        when that target is included vs. excluded.  The penalty is set to the
+        ``stringency`` percentile of these marginal costs, so only targets with
+        above-threshold interactivity are candidates for removal.
+        """
+        greedy_by_target = {
+            pair_to_target[pid]: pid for pid in greedy_solution.primer_pairs
+        }
+        all_pairs = [
+            greedy_by_target[tid] for tid in ordered_targets if tid in greedy_by_target
+        ]
+
+        if len(all_pairs) < 2:
+            return 1.0
+
+        full_cost = self.cost_function.calc_cost(all_pairs)
+
+        marginal_costs = []
+        for tid in ordered_targets:
+            pid = greedy_by_target.get(tid)
+            if pid is None:
+                continue
+            without = [p for p in all_pairs if p != pid]
+            cost_without = self.cost_function.calc_cost(without) if without else 0.0
+            marginal_costs.append(full_cost - cost_without)
+
+        if not marginal_costs:
+            return 1.0
+
+        marginal_costs.sort()
+        idx = min(int(stringency * len(marginal_costs)), len(marginal_costs) - 1)
+        penalty = marginal_costs[idx]
+        return max(penalty, 0.01)
 
 
 # ================================================================================
