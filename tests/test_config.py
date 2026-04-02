@@ -156,7 +156,7 @@ class TestMultiplexPickerParameters:
     def test_default_values(self):
         """Test that default values are set correctly."""
         params = MultiplexPickerParameters()
-        assert params.target_plexity == 20
+        assert params.target_plexity == 24
         assert params.minimum_plexity == 10
         assert params.maximum_plexity == 50
         assert params.force_plexity is False
@@ -198,7 +198,7 @@ class TestBlastParameters:
         assert params.blast_penalty == -1
         assert params.blast_max_hsps == 100
         assert params.blast_dust == "yes"
-        assert params.max_amplicon_size == 2000
+        assert params.max_amplicon_size == 1000
         assert params.ontarget_tolerance == 5
 
     def test_valid_custom_values(self):
@@ -254,7 +254,7 @@ class TestDesignerConfig:
         assert config.singleplex_design_parameters.PRIMER_OPT_TM == 60.0
         assert config.primer_pair_parameters.PRIMER_PRODUCT_MAX_SIZE == 120
         assert config.pcr_conditions.annealing_temperature == 60.0
-        assert config.multiplex_picker_parameters.target_plexity == 20
+        assert config.multiplex_picker_parameters.target_plexity == 24
 
     def test_from_dict_partial(self):
         """Test loading config from dict with partial values."""
