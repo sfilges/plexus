@@ -489,6 +489,14 @@ with "compliance with registry fallback verifies checksums and fails on mismatch
 
 ## v1.1 — Enhanced Specificity Analysis
 
+> **v1.1.0 released: 2026-03-13** — Vectorized BLAST annotation and off-target finding,
+> HTML visual QC report (REPT-02).
+>
+> **v1.2.0 released: 2026-03-26** — Enriched CSV output (12 thermodynamic columns),
+> per-assay cross-dimer contribution, primer-level dimer matrix + heatmap, two-stage
+> candidate pair cap (partial PERF-02), target dropout for DFS selector (partial ARCH-01),
+> plexity clamping, Plotly.js bundle fix.
+
 v1.1 focuses on improving the scientific accuracy of the BLAST-based specificity check,
 incorporating thermodynamic ΔG scoring for individual binding sites and advancing toward a
 genuine in-silico PCR (isPCR) model. These items are valuable but not blocking for clinical
@@ -516,6 +524,12 @@ Implementing it now keeps the config fields honest and makes the infrastructure 
 > always included in the multiplex. The `target_plexity`, `minimum_plexity`, and
 > `maximum_plexity` config parameters are reserved for a future release that supports partial
 > panel selection and pool splitting.
+
+**v1.2.0 progress:** Target dropout is now implemented in the DFS selector
+(`allow_target_dropping`, `dropout_stringency`, `min_target_fraction`), and plexity values
+are clamped to the actual input count. However, the explicit plexity cost term in
+`MultiplexCostFunction.calc_cost()` is still not implemented — the config fields `wt_lt`
+and `wt_gt` remain unused.
 
 ---
 
@@ -681,6 +695,13 @@ appear in the optimal solution regardless of multiplex interactions).
 
 Add a `max_candidates_per_junction` parameter to `MultiplexPickerParameters` (default: unlimited).
 
+**v1.2.0 progress:** A two-stage candidate pair cap was implemented: `max_pairs_pre_filter`
+(default 500) caps immediately after pair design, and `max_pairs_per_junction` (default 100)
+caps after SNP/BLAST filtering. This addresses the memory/BLAST workload concern but is a
+cap-based approach rather than the quality-ranked pre-filter described above. The remaining
+value of this item is implementing a `pair_penalty`-ranked top-K selection rather than an
+arbitrary cap.
+
 ---
 
 ### EXT-01 · Additional genome presets
@@ -739,13 +760,96 @@ indicated, in mode=research just showing the versions should be enough.
 
 ### SPLIT-01 · Automated Panel Splitting
 
-**Severity: Future**
+**Severity: Important · Prerequisite: ARCH-01 (plexity cost term)**
 
-Implement an optimization algorithm to partition large panels into multiple pools (e.g., 2x20plex)
-to minimize intra-pool dimer interactions. This addresses cases where a single multiplex is
-thermodynamically impossible due to unavoidable primer-pair interactions. This is a highly
-complex feature, and out of scope for the moment, but would be a great addition to the
-project.
+Partition large panels into K pools (e.g., 2×20-plex) to minimize intra-pool cross-dimer
+interactions. Addresses cases where a single multiplex is thermodynamically impossible due
+to unavoidable primer-pair interactions.
+
+**Approach: two-phase split using the existing DFS selector.**
+
+#### Phase 1 — Target interaction matrix + initial partition
+
+Before invoking the per-pool DFS, build a **target-level cross-dimer interaction matrix**:
+
+```
+For each pair of targets (A, B):
+    score[A, B] = min cross-dimer cost across top candidate pairs for A and B
+```
+
+This reuses the existing `PrimerDimerPredictor`. The v1.2.0 primer-level dimer matrix in
+`reporting/qc.py` already computes a similar matrix for the selected panel; this extends it
+to all candidates up front.
+
+Apply spectral clustering or greedy graph partitioning on this matrix to produce an initial
+K-way target assignment. This gives Phase 2 a structured warm start.
+
+**New file:** `src/plexus/selector/pool_assigner.py`
+- `build_target_interaction_matrix(pair_lookup, primer_df) → np.ndarray`
+- `partition_targets(interaction_matrix, k, strategy) → list[list[target_id]]`
+- Strategies: `"spectral"` (scipy/sklearn), `"greedy"` (no extra dependency)
+
+#### Phase 2 — Per-pool DFS + inter-pool refinement
+
+Run the existing `DepthFirstSearch` independently on each pool's assigned targets. The DFS
+runs unmodified — it already handles variable-size target sets and computes normalized
+cross-dimer costs.
+
+After per-pool DFS, run Kernighan-Lin-style local search refinement:
+
+```
+for each target T in pool_i:
+    for each pool_j ≠ pool_i:
+        if moving T from pool_i → pool_j reduces total cost
+        and both pools still satisfy plexity constraints:
+            reassign T, re-run DFS on affected pools
+```
+
+This catches cases where the Phase 1 partition was suboptimal. The refinement is cheap
+(linear in N × K) because it only re-evaluates the marginal cost of moving a single target.
+
+#### Config changes
+
+`MultiplexPickerParameters` already stubs `allow_split_panel: bool = False` and
+`max_splits: int = 2`. Add:
+
+- `split_strategy: str = "greedy"` — partition algorithm (`"greedy"` | `"spectral"`)
+- `max_plexity_per_pool: int | None = None` — per-pool ceiling (defaults to
+  `maximum_plexity` if unset)
+- `min_plexity_per_pool: int | None = None` — per-pool floor (defaults to
+  `minimum_plexity` if unset)
+
+#### Pipeline integration
+
+In `run_pipeline()`, after the post-filter cap (Step 4) and before multiplex optimization
+(Step 5):
+
+1. If `allow_split_panel` is enabled and the number of targets exceeds
+   `max_plexity_per_pool`, invoke the pool assigner (Phase 1).
+2. Run DFS per pool (Phase 2), then local-search refinement.
+3. Output becomes multiple `Multiplex` objects tagged with a `pool_id`.
+
+#### Output changes
+
+- `selected_multiplex.csv` and `top_panels.csv` gain a `Pool` column.
+- `panel_summary.json` gains a `pools` section listing targets per pool, per-pool cost,
+  and per-pool cross-dimer statistics.
+- `panel_qc.json` and `panel_report.html` show per-pool and cross-pool dimer heatmaps.
+
+#### Connection to ARCH-01
+
+With splitting, a pool may end up with fewer targets than `target_plexity`. The plexity
+cost term (`wt_lt`, `wt_gt`) is needed to discourage lopsided splits (e.g., 28 targets in
+pool 1, 2 in pool 2). **Implementing ARCH-01 first is a prerequisite.**
+
+#### Tests
+
+- `tests/test_pool_assigner.py`: interaction matrix construction, partition balance,
+  determinism with seed.
+- `tests/test_selector.py`: DFS per-pool produces valid solutions, refinement improves or
+  maintains cost, plexity constraints respected after reassignment.
+- Integration test: end-to-end split pipeline with a synthetic 40-target panel that has two
+  obvious interaction clusters.
 
 ---
 
@@ -774,16 +878,17 @@ project.
 | ~~SCI-01~~ | ~~Weight SNP penalties by allele frequency~~ | ~~v1.0~~ | ~~Important~~ | ✅ v0.5.6 |
 | ~~ARCH-04~~ | ~~Remove genome download functionality~~ | ~~v1.0~~ | ~~Important~~ | ✅ v0.5.1 |
 | ~~ARCH-05~~ | ~~Allow registry use in compliance mode~~ | ~~v1.0~~ | ~~Important~~ | ✅ v0.5.3 |
-| ARCH-01 | Implement plexity penalty in cost function | v1.1 | Important | |
+| ARCH-01 | Implement plexity penalty in cost function | v1.1 | Important | Partial (v1.2.0) |
 | ISPCR-01 | ntthal ΔG scoring for BLAST binding sites | v1.1 | Important | |
 | ISPCR-02 | ΔG-weighted off-target cost in selector | v1.1 | Important | |
 | ISPCR-03 | Template mispriming check | v1.1 | Low | |
 | SPEC-01 | Assign cross-pair off-target amplicons to primer pairs | v1.1 | Important | |
 | ISPCR-04 | Cross-target interaction matrix output | v1.1 | Low | |
 | PERF-01 | Parallel thermodynamics by default | v1.1 | Low | |
-| PERF-02 | Pre-filter candidates per junction before optimisation | v1.1 | Low | |
+| PERF-02 | Pre-filter candidates per junction before optimisation | v1.1 | Low | Partial (v1.2.0) |
 | EXT-01 | Additional genome presets | v1.1 | Low | |
 | EXT-02 | Chromosome naming normalisation | v1.1 | Low | |
 | ~~REPT-02~~ | ~~Visual QC Report (HTML)~~ | ~~v1.1~~ | ~~Low~~ | ✅ v1.1.0 |
-| SPLIT-01 | Automated Panel Splitting | Future | Future | |
+| AUDT-04 | Improve `plexus status` command | v1.1 | Low | |
+| SPLIT-01 | Automated Panel Splitting (two-phase: partition + per-pool DFS) | v2.x | Important | Planned |
 | ~~TEST-01~~ | ~~End-to-end integration test with real BLAST~~ | ~~v1.0~~ | ~~Important~~ | ✅ v0.4.0 |
