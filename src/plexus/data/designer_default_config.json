@@ -82,7 +82,7 @@
         "blast_penalty": -1,
         "blast_max_hsps": 100,
         "blast_dust": "yes",
-        "max_amplicon_size": 2000,
+        "max_amplicon_size": 1000,
         "ontarget_tolerance": 5
     },
     "multiplex_picker_parameters": {

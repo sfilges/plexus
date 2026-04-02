@@ -413,7 +413,7 @@ class BlastParameters(BaseModel):
         ),
     )
     max_amplicon_size: int = Field(
-        default=2000,
+        default=1000,
         ge=100,
         le=50000,
         description=(
