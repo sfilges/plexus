@@ -80,7 +80,8 @@ def mock_config():
     p.PRIMER_PAIR_WT_PRODUCT_SIZE_GT = 1.0
     p.PRIMER_PAIR_WT_PRODUCT_SIZE_LT = 1.0
     p.PRIMER_PAIR_WT_DIFF_TM = 1.0
-    p.max_pairs_per_junction = None  # No cap in tests by default
+    p.max_pairs_pre_filter = None  # No cap in tests by default
+    p.max_pairs_per_junction = None
     return config
 
 

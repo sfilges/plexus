@@ -707,6 +707,21 @@ def run_pipeline(
                 result.steps_completed.append("specificity_skipped")
 
             # =========================================================================
+            # Step 4.5: Post-filter cap on candidate pairs per junction
+            # =========================================================================
+            max_pairs = config.primer_pair_parameters.max_pairs_per_junction
+            if max_pairs is not None:
+                for junction in panel.junctions:
+                    if len(junction.primer_pairs) > max_pairs:
+                        original_count = len(junction.primer_pairs)
+                        junction.primer_pairs.sort(key=lambda p: p.pair_penalty)
+                        junction.primer_pairs = junction.primer_pairs[:max_pairs]
+                        logger.info(
+                            f"Post-filter cap: {junction.name} to {max_pairs} pairs "
+                            f"(from {original_count})"
+                        )
+
+            # =========================================================================
             # Step 5: Multiplex optimization
             # =========================================================================
             advance_step("Multiplex optimization")

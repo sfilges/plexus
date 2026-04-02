@@ -141,13 +141,25 @@ class PrimerPairParameters(BaseModel):
     PRIMER_PAIR_WT_PRODUCT_SIZE_LT: float = Field(default=0.5, ge=0.0)
     PRIMER_PAIR_WT_PRODUCT_SIZE_GT: float = Field(default=2.0, ge=0.0)
 
+    max_pairs_pre_filter: int | None = Field(
+        default=500,
+        ge=1,
+        description=(
+            "Loose cap on candidate primer pairs per junction applied immediately "
+            "after design, before SNP and BLAST filtering. Limits memory and BLAST "
+            "workload for junctions with very large candidate pools. "
+            "Set to None to disable."
+        ),
+    )
+
     max_pairs_per_junction: int | None = Field(
         default=100,
         ge=1,
         description=(
-            "Maximum candidate primer pairs retained per junction after design. "
-            "Pairs are ranked by pair_penalty (lowest = best) and the top N are kept. "
-            "Reduces DFS search space without meaningful quality loss. "
+            "Maximum candidate primer pairs retained per junction after all quality "
+            "filters (SNP check, BLAST specificity). Pairs are ranked by pair_penalty "
+            "(lowest = best) and the top N are kept. Applied right before multiplex "
+            "optimization to bound the search space. "
             "Set to None to disable."
         ),
     )

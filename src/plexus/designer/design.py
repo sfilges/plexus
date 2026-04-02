@@ -212,14 +212,14 @@ def design_multiplex_primers(
                 reverse_tail=reverse_tail,
             )
 
-            # Cap candidate pairs per junction to bound the search space
-            max_pairs = pair_params.max_pairs_per_junction
-            if max_pairs is not None and len(junction.primer_pairs) > max_pairs:
+            # Loose pre-filter cap to limit memory / BLAST workload
+            max_pre = pair_params.max_pairs_pre_filter
+            if max_pre is not None and len(junction.primer_pairs) > max_pre:
                 original_count = len(junction.primer_pairs)
                 junction.primer_pairs.sort(key=lambda p: p.pair_penalty)
-                junction.primer_pairs = junction.primer_pairs[:max_pairs]
+                junction.primer_pairs = junction.primer_pairs[:max_pre]
                 logger.info(
-                    f"Capped {junction.name} to {max_pairs} pairs "
+                    f"Pre-filter cap: {junction.name} to {max_pre} pairs "
                     f"(from {original_count})"
                 )
         except Exception as e:
