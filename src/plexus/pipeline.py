@@ -788,6 +788,13 @@ def run_pipeline(
                             n_input_targets,
                         )
 
+                        logger.info(
+                            f"DFS plexity: n_input_targets={n_input_targets}, "
+                            f"minimum_plexity={mpick.minimum_plexity}, "
+                            f"effective_min={effective_min}, "
+                            f"min_target_floor={min_target_floor}"
+                        )
+
                         solutions = selector_obj.run(
                             allow_target_dropping=mpick.allow_target_dropping,
                             min_target_floor=min_target_floor,

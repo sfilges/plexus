@@ -198,7 +198,7 @@ class MultiplexPickerParameters(BaseModel):
         description="Random seed for stochastic selectors (Greedy, Random, SimulatedAnnealing).",
     )
 
-    target_plexity: int = Field(default=20, ge=2, le=500)
+    target_plexity: int = Field(default=24, ge=2, le=500)
     minimum_plexity: int = Field(default=10, ge=1, le=500)
     maximum_plexity: int = Field(default=50, ge=2, le=1000)
 
