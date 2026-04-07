@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from plexus.config import RescueTier
 from plexus.designer.design import design_multiplex_primers, design_primers
 from plexus.designer.multiplexpanel import Junction, MultiplexPanel, PrimerDesigns
 from plexus.designer.primer import Primer, PrimerPair
@@ -70,6 +71,7 @@ def mock_config():
     s.primer_gc_clamp = 0
     s.forward_tail = ""
     s.reverse_tail = ""
+    s.primer_max_poly_gc = 3
 
     p = config.primer_pair_parameters
     p.PRIMER_PRODUCT_MIN_INSERT_SIZE = 40
@@ -82,6 +84,29 @@ def mock_config():
     p.PRIMER_PAIR_WT_DIFF_TM = 1.0
     p.max_pairs_pre_filter = None  # No cap in tests by default
     p.max_pairs_per_junction = None
+
+    # Rescue defaults
+    config.enable_rescue = True
+    config.rescue_tiers = [
+        RescueTier(
+            PRIMER_MIN_TM=56.0,
+            PRIMER_MAX_TM=64.0,
+            PRIMER_PAIR_MAX_DIFF_TM=4.0,
+            PRIMER_MAX_HAIRPIN_TH=30.0,
+            PRIMER_MAX_END_STABILITY=5.0,
+            description="Tier 1",
+        ),
+        RescueTier(
+            PRIMER_MIN_TM=55.0,
+            PRIMER_MAX_TM=65.0,
+            PRIMER_PAIR_MAX_DIFF_TM=5.0,
+            PRIMER_MAX_HAIRPIN_TH=35.0,
+            PRIMER_MAX_END_STABILITY=5.5,
+            PRIMER_PRODUCT_MAX_SIZE=130,
+            description="Tier 2",
+        ),
+    ]
+    config.apply_rescue_tier = MagicMock(side_effect=lambda idx: config)
     return config
 
 
@@ -405,3 +430,161 @@ class TestPrimerDesignsAttached:
         primer_table = minimal_junction.primer_designs.primer_table
         assert isinstance(primer_table, list)
         assert len(primer_table) == 2
+
+
+class TestRescueDesign:
+    """Tests for tiered rescue when default primer design fails."""
+
+    @patch("plexus.designer.design.calculate_single_primer_thermodynamics")
+    @patch("plexus.designer.design.generate_kmers")
+    def test_rescue_triggered_when_default_fails(
+        self, mock_kmers, mock_thermo, minimal_junction, minimal_panel
+    ):
+        """Default attempt yields 0 pairs, tier 1 rescue succeeds."""
+        primers = _many_primers(150)
+        mock_kmers.return_value = primers
+        mock_thermo.return_value = (primers, "eval")
+
+        # Default: 0 pairs; rescue: has pairs
+        rescue_pair = make_pair()
+        call_count = [0]
+
+        def find_pairs_side_effect(**kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return []  # Default attempt fails
+            return [rescue_pair]  # Rescue succeeds
+
+        minimal_junction.find_primer_pairs = MagicMock(
+            side_effect=find_pairs_side_effect
+        )
+        design_multiplex_primers(minimal_panel)
+
+        assert minimal_junction in minimal_panel.junctions
+        assert minimal_junction._rescue_tier == 1
+        assert rescue_pair.rescue_tier == 1
+
+    @patch("plexus.designer.design.calculate_single_primer_thermodynamics")
+    @patch("plexus.designer.design.generate_kmers")
+    def test_rescue_tier2_triggered_when_tier1_fails(
+        self, mock_kmers, mock_thermo, minimal_junction, minimal_panel
+    ):
+        """Default and tier 1 fail, tier 2 succeeds."""
+        primers = _many_primers(150)
+        mock_kmers.return_value = primers
+        mock_thermo.return_value = (primers, "eval")
+
+        rescue_pair = make_pair()
+        call_count = [0]
+
+        def find_pairs_side_effect(**kwargs):
+            call_count[0] += 1
+            if call_count[0] <= 2:
+                return []  # Default + tier 1 fail
+            return [rescue_pair]  # Tier 2 succeeds
+
+        minimal_junction.find_primer_pairs = MagicMock(
+            side_effect=find_pairs_side_effect
+        )
+        design_multiplex_primers(minimal_panel)
+
+        assert minimal_junction in minimal_panel.junctions
+        assert minimal_junction._rescue_tier == 2
+        assert rescue_pair.rescue_tier == 2
+
+    @patch("plexus.designer.design.calculate_single_primer_thermodynamics")
+    @patch("plexus.designer.design.generate_kmers")
+    def test_rescue_disabled_skips_retry(
+        self, mock_kmers, mock_thermo, minimal_junction, minimal_panel
+    ):
+        """With rescue disabled, no retry occurs and junction fails."""
+        minimal_panel.config.enable_rescue = False
+
+        primers = _many_primers(150)
+        mock_kmers.return_value = primers
+        mock_thermo.return_value = (primers, "eval")
+        minimal_junction.find_primer_pairs = MagicMock(return_value=[])
+
+        design_multiplex_primers(minimal_panel)
+
+        assert minimal_junction in minimal_panel.failed_junctions
+        assert minimal_junction not in minimal_panel.junctions
+        # find_primer_pairs should be called exactly once (no rescue)
+        assert minimal_junction.find_primer_pairs.call_count == 1
+
+    @patch("plexus.designer.design.calculate_single_primer_thermodynamics")
+    @patch("plexus.designer.design.generate_kmers")
+    def test_rescue_tags_all_pairs(
+        self, mock_kmers, mock_thermo, minimal_junction, minimal_panel
+    ):
+        """All pairs from a rescued junction have the correct rescue_tier."""
+        primers = _many_primers(150)
+        mock_kmers.return_value = primers
+        mock_thermo.return_value = (primers, "eval")
+
+        pair1, pair2 = make_pair(), make_pair()
+        pair2.pair_id = "pair2"
+        call_count = [0]
+
+        def find_pairs_side_effect(**kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return []
+            return [pair1, pair2]
+
+        minimal_junction.find_primer_pairs = MagicMock(
+            side_effect=find_pairs_side_effect
+        )
+        design_multiplex_primers(minimal_panel)
+
+        assert pair1.rescue_tier == 1
+        assert pair2.rescue_tier == 1
+
+    @patch("plexus.designer.design.calculate_single_primer_thermodynamics")
+    @patch("plexus.designer.design.generate_kmers")
+    def test_rescue_exhausted_reports_design_error(
+        self, mock_kmers, mock_thermo, minimal_junction, minimal_panel
+    ):
+        """All tiers fail — junction._design_error set with diagnostic info."""
+        primers = _many_primers(150)
+        mock_kmers.return_value = primers
+        mock_thermo.return_value = (primers, "eval")
+        minimal_junction.find_primer_pairs = MagicMock(return_value=[])
+
+        design_multiplex_primers(minimal_panel)
+
+        assert minimal_junction in minimal_panel.failed_junctions
+        assert "no valid primer pairs" in minimal_junction._design_error
+
+    @patch("plexus.designer.design.calculate_single_primer_thermodynamics")
+    @patch("plexus.designer.design.generate_kmers")
+    def test_kmers_not_regenerated_during_rescue(
+        self, mock_kmers, mock_thermo, minimal_junction, minimal_panel
+    ):
+        """generate_kmers is called exactly twice (fwd+rev), regardless of rescue."""
+        primers = _many_primers(150)
+        mock_kmers.return_value = primers
+        mock_thermo.return_value = (primers, "eval")
+        minimal_junction.find_primer_pairs = MagicMock(return_value=[])
+
+        design_multiplex_primers(minimal_panel)
+
+        # 2 calls: forward + reverse — no extra calls during rescue
+        assert mock_kmers.call_count == 2
+
+    @patch("plexus.designer.design.calculate_single_primer_thermodynamics")
+    @patch("plexus.designer.design.generate_kmers")
+    def test_standard_design_has_rescue_tier_zero(
+        self, mock_kmers, mock_thermo, minimal_junction, minimal_panel
+    ):
+        """Junctions that succeed on default design get rescue_tier=0."""
+        primers = _many_primers(150)
+        mock_kmers.return_value = primers
+        mock_thermo.return_value = (primers, "eval")
+        pair = make_pair()
+        minimal_junction.find_primer_pairs = MagicMock(return_value=[pair])
+
+        design_multiplex_primers(minimal_panel)
+
+        assert minimal_junction._rescue_tier == 0
+        assert pair.rescue_tier == 0

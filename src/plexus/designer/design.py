@@ -8,7 +8,9 @@ import warnings
 
 from loguru import logger
 
+from plexus.config import DesignerConfig
 from plexus.designer.multiplexpanel import (
+    Junction,
     MultiplexPanel,
     PrimerDesigns,
 )
@@ -44,6 +46,87 @@ def design_primers(
 
 
 # ================================================================================
+# Helper: run thermodynamic filtering + pair finding for a single attempt
+# ================================================================================
+
+
+def _attempt_pair_design(
+    junction: Junction,
+    left_kmers: list,
+    right_kmers: list,
+    config: DesignerConfig,
+) -> tuple[list, list, list, str]:
+    """Run thal filtering and pair-finding with the given config.
+
+    Returns (left_primers, right_primers, primer_pairs, eval_string).
+    """
+    singleplex = config.singleplex_design_parameters
+    pair_params = config.primer_pair_parameters
+
+    left_primers, left_eval = calculate_single_primer_thermodynamics(
+        left_kmers, config, orientation="left"
+    )
+    right_primers, right_eval = calculate_single_primer_thermodynamics(
+        right_kmers, config, orientation="right"
+    )
+
+    eval_string = f"LEFT PRIMERS: {left_eval}, RIGHT PRIMERS: {right_eval}"
+
+    # Save designs so find_primer_pairs can access design_region
+    junction.primer_designs = PrimerDesigns(
+        name=f"{junction.name}_designs",
+        target=junction.name,
+        design_region=junction.design_region,
+        eval_string=eval_string,
+        primer_table=[left_primers, right_primers],
+    )
+
+    logger.info(
+        f"Primers retained post thermodynamic filtering: "
+        f"Left: {len(left_primers)}, Right: {len(right_primers)}"
+    )
+
+    min_primer_length = singleplex.primer_min_length
+    min_amplicon_length = (
+        pair_params.PRIMER_PRODUCT_MIN_INSERT_SIZE + 2 * min_primer_length
+    )
+
+    pairs = junction.find_primer_pairs(
+        min_amplicon_length=min_amplicon_length,
+        max_amplicon_length=pair_params.PRIMER_PRODUCT_MAX_SIZE,
+        max_primer_tm_difference=pair_params.PRIMER_PAIR_MAX_DIFF_TM,
+        product_opt_size=pair_params.PRIMER_PRODUCT_OPT_SIZE,
+        wt_pr_penalty=pair_params.PRIMER_PAIR_WT_PR_PENALTY,
+        wt_product_size_gt=pair_params.PRIMER_PAIR_WT_PRODUCT_SIZE_GT,
+        wt_product_size_lt=pair_params.PRIMER_PAIR_WT_PRODUCT_SIZE_LT,
+        wt_diff_tm=pair_params.PRIMER_PAIR_WT_DIFF_TM,
+        forward_tail=singleplex.forward_tail,
+        reverse_tail=singleplex.reverse_tail,
+    )
+
+    return left_primers, right_primers, pairs, eval_string
+
+
+def _compute_min_amplicon(left_primers: list, right_primers: list) -> int | None:
+    """Compute the smallest possible amplicon from surviving primers."""
+    if not left_primers or not right_primers:
+        return None
+    max_left_end = max(p.start + p.length for p in left_primers)
+    min_right_start = min(p.start for p in right_primers)
+    min_right_length = min(
+        p.length for p in right_primers if p.start == min_right_start
+    )
+    return (
+        min_right_start
+        + min_right_length
+        - (
+            max_left_end
+            - max(p.length for p in left_primers if p.start + p.length == max_left_end)
+        )
+    )
+
+
+# ================================================================================
 # Custom primer design function based on primer3
 # ================================================================================
 
@@ -67,11 +150,11 @@ def design_multiplex_primers(
     # Common parameters for all junctions
     # =============================================
 
-    # Get config sections for easier access
-    singleplex = panel.config.singleplex_design_parameters
-    pair_params = panel.config.primer_pair_parameters
+    config = panel.config
+    singleplex = config.singleplex_design_parameters
+    pair_params = config.primer_pair_parameters
 
-    # Single primer parameters
+    # K-mer generation parameters (unchanged across rescue tiers)
     min_primer_length = singleplex.primer_min_length
     max_primer_length = singleplex.primer_max_length
     max_poly_X = singleplex.primer_max_poly_x
@@ -81,24 +164,6 @@ def design_multiplex_primers(
     max_gc = singleplex.primer_max_gc
     gc_clamp = singleplex.primer_gc_clamp
     min_region_length = 2 * max_primer_length
-
-    # Primer pair parameters
-    min_amplicon_length = (
-        pair_params.PRIMER_PRODUCT_MIN_INSERT_SIZE + 2 * min_primer_length
-    )
-    max_amplicon_length = pair_params.PRIMER_PRODUCT_MAX_SIZE
-    max_primer_tm_difference = pair_params.PRIMER_PAIR_MAX_DIFF_TM
-    pair_product_opt_size = pair_params.PRIMER_PRODUCT_OPT_SIZE
-
-    # Weights for primer pair penalty calculations
-    wt_pr_penalty = pair_params.PRIMER_PAIR_WT_PR_PENALTY
-    wt_product_size_gt = pair_params.PRIMER_PAIR_WT_PRODUCT_SIZE_GT
-    wt_product_size_lt = pair_params.PRIMER_PAIR_WT_PRODUCT_SIZE_LT
-    wt_diff_tm = pair_params.PRIMER_PAIR_WT_DIFF_TM
-
-    # Tail sequences (prepended to primers for dimer scoring and output)
-    forward_tail = singleplex.forward_tail
-    reverse_tail = singleplex.reverse_tail
 
     # =============================================
     # Start designing
@@ -114,18 +179,13 @@ def design_multiplex_primers(
             # Get the design regions left and right of the junction, respectively.
             left_region = junction.design_region[0 : junction.jmin_coordinate]
 
-            # Should the right region be reverse complemented here?
             right_region = reverse_complement(
                 junction.design_region[
                     junction.jmax_coordinate : junction.junction_length
                 ]
             )
 
-            # This generates candidate primers, returns a list of Primer class objects,
-            # which have been filtered based on length and basic sequence properties.
-            # The offset is necessary as the start positions of the generated kmer
-            # (on the design_region) are starting at position jmax_coordinate for the
-            # reverse primer and at 0 for the forward primer.
+            # Generate candidate k-mers (once — filters don't change across rescue tiers)
             for orientation, region, offset in [
                 ("forward", left_region, 0),
                 ("reverse", right_region, junction.jmax_coordinate),
@@ -171,46 +231,47 @@ def design_multiplex_primers(
                 logger.warning(msg)
                 warnings.warn(msg, stacklevel=2)
 
-            # Calculate thermodynamic properties of candidate primers and remove low quality primers based on config.
-            left_primers, left_eval_string = calculate_single_primer_thermodynamics(
-                left_kmers, panel.config, orientation="left"
+            # --- Attempt default design ---
+            left_primers, right_primers, pairs, eval_string = _attempt_pair_design(
+                junction,
+                left_kmers,
+                right_kmers,
+                config,
             )
-            right_primers, right_eval_string = calculate_single_primer_thermodynamics(
-                right_kmers, panel.config, orientation="right"
-            )
+            rescue_tier = 0
 
-            primer_table = [left_primers, right_primers]
+            # --- Rescue loop for failed junctions ---
+            if not pairs and config.enable_rescue:
+                for tier_idx, tier in enumerate(config.rescue_tiers, start=1):
+                    logger.info(
+                        f"Rescue tier {tier_idx} for {junction.name}: {tier.description}"
+                    )
+                    rescue_config = config.apply_rescue_tier(tier_idx - 1)
+                    left_primers, right_primers, pairs, eval_string = (
+                        _attempt_pair_design(
+                            junction,
+                            left_kmers,
+                            right_kmers,
+                            rescue_config,
+                        )
+                    )
+                    if pairs:
+                        rescue_tier = tier_idx
+                        logger.info(
+                            f"Rescue tier {tier_idx} succeeded for {junction.name}: "
+                            f"{len(pairs)} pairs found"
+                        )
+                        break
+                    logger.info(
+                        f"Rescue tier {tier_idx} for {junction.name}: " f"still 0 pairs"
+                    )
 
-            eval_string = (
-                f"LEFT PRIMERS: {left_eval_string}, RIGHT PRIMERS: {right_eval_string}"
-            )
+            junction.primer_pairs = pairs
+            junction._rescue_tier = rescue_tier
 
-            # Save designs in junction object
-            junction.primer_designs = PrimerDesigns(
-                name=f"{junction.name}_designs",
-                target=junction.name,
-                design_region=junction.design_region,
-                eval_string=eval_string,
-                primer_table=primer_table,
-            )
-
-            logger.info(
-                f"Primers retained post theromdynamic alignment: Left: {len(left_primers)}, right {len(right_primers)}"
-            )
-
-            # Find suitable primer pairs from initial designs and calculate primer pair penalties
-            junction.primer_pairs = junction.find_primer_pairs(
-                min_amplicon_length=min_amplicon_length,
-                max_amplicon_length=max_amplicon_length,
-                max_primer_tm_difference=max_primer_tm_difference,
-                product_opt_size=pair_product_opt_size,
-                wt_pr_penalty=wt_pr_penalty,
-                wt_product_size_gt=wt_product_size_gt,
-                wt_product_size_lt=wt_product_size_lt,
-                wt_diff_tm=wt_diff_tm,
-                forward_tail=forward_tail,
-                reverse_tail=reverse_tail,
-            )
+            # Tag all pairs with their rescue tier
+            for pair in junction.primer_pairs:
+                pair.rescue_tier = rescue_tier
 
             # Loose pre-filter cap to limit memory / BLAST workload
             max_pre = pair_params.max_pairs_pre_filter
@@ -222,6 +283,24 @@ def design_multiplex_primers(
                     f"Pre-filter cap: {junction.name} to {max_pre} pairs "
                     f"(from {original_count})"
                 )
+
+            # Diagnostics for still-failed junctions
+            if not junction.primer_pairs:
+                min_amp = _compute_min_amplicon(left_primers, right_primers)
+                max_allowed = pair_params.PRIMER_PRODUCT_MAX_SIZE
+                if config.enable_rescue and config.rescue_tiers:
+                    last_tier = config.rescue_tiers[-1]
+                    if last_tier.PRIMER_PRODUCT_MAX_SIZE is not None:
+                        max_allowed = last_tier.PRIMER_PRODUCT_MAX_SIZE
+
+                if min_amp is not None:
+                    junction._design_error = (
+                        f"no valid primer pairs (closest achievable amplicon: "
+                        f"{min_amp}bp, max allowed: {max_allowed}bp)"
+                    )
+                else:
+                    junction._design_error = "no valid primer pairs"
+
         except Exception as e:
             logger.warning(
                 f"Primer design failed for junction {junction.name}: {e}. Skipping."
@@ -242,6 +321,20 @@ def design_multiplex_primers(
             logger.warning(
                 f"  - {fj.name}: {getattr(fj, '_design_error', 'no valid primer pairs')}"
             )
+
+    # Log rescued junctions
+    rescued = [
+        jn
+        for jn in panel.junctions
+        if jn.primer_pairs and getattr(jn, "_rescue_tier", 0) > 0
+    ]
+    if rescued:
+        logger.info(f"{len(rescued)} junction(s) rescued with relaxed parameters.")
+        for rj in rescued:
+            tier_idx = rj._rescue_tier
+            tier = config.rescue_tiers[tier_idx - 1]
+            logger.info(f"  - {rj.name}: {tier.description}")
+
     panel.failed_junctions = failed
     panel.junctions = [jn for jn in panel.junctions if jn.primer_pairs]
 

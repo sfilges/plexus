@@ -15,6 +15,7 @@ from plexus.config import (
     MultiplexPickerParameters,
     PCRConditions,
     PrimerPairParameters,
+    RescueTier,
     SingleplexDesignParameters,
     load_config,
 )
@@ -156,7 +157,7 @@ class TestMultiplexPickerParameters:
     def test_default_values(self):
         """Test that default values are set correctly."""
         params = MultiplexPickerParameters()
-        assert params.target_plexity == 20
+        assert params.target_plexity == 24
         assert params.minimum_plexity == 10
         assert params.maximum_plexity == 50
         assert params.force_plexity is False
@@ -198,7 +199,7 @@ class TestBlastParameters:
         assert params.blast_penalty == -1
         assert params.blast_max_hsps == 100
         assert params.blast_dust == "yes"
-        assert params.max_amplicon_size == 2000
+        assert params.max_amplicon_size == 1000
         assert params.ontarget_tolerance == 5
 
     def test_valid_custom_values(self):
@@ -254,7 +255,7 @@ class TestDesignerConfig:
         assert config.singleplex_design_parameters.PRIMER_OPT_TM == 60.0
         assert config.primer_pair_parameters.PRIMER_PRODUCT_MAX_SIZE == 120
         assert config.pcr_conditions.annealing_temperature == 60.0
-        assert config.multiplex_picker_parameters.target_plexity == 20
+        assert config.multiplex_picker_parameters.target_plexity == 24
 
     def test_from_dict_partial(self):
         """Test loading config from dict with partial values."""
@@ -380,6 +381,95 @@ class TestDesignerConfig:
             original.primer_pair_parameters.PRIMER_PRODUCT_MAX_SIZE
             == restored.primer_pair_parameters.PRIMER_PRODUCT_MAX_SIZE
         )
+
+
+class TestRescueConfig:
+    """Tests for rescue tier configuration."""
+
+    def test_enable_rescue_defaults_true(self):
+        config = DesignerConfig()
+        assert config.enable_rescue is True
+
+    def test_default_rescue_tiers_count(self):
+        config = DesignerConfig()
+        assert len(config.rescue_tiers) == 2
+
+    def test_rescue_tier1_values(self):
+        config = DesignerConfig()
+        tier = config.rescue_tiers[0]
+        assert tier.PRIMER_MIN_TM == 56.0
+        assert tier.PRIMER_MAX_TM == 64.0
+        assert tier.PRIMER_PAIR_MAX_DIFF_TM == 4.0
+        assert tier.PRIMER_MAX_HAIRPIN_TH == 30.0
+        assert tier.PRIMER_MAX_END_STABILITY == 5.0
+        assert tier.PRIMER_PRODUCT_MAX_SIZE is None
+
+    def test_rescue_tier2_values(self):
+        config = DesignerConfig()
+        tier = config.rescue_tiers[1]
+        assert tier.PRIMER_MIN_TM == 55.0
+        assert tier.PRIMER_MAX_TM == 65.0
+        assert tier.PRIMER_PAIR_MAX_DIFF_TM == 5.0
+        assert tier.PRIMER_MAX_HAIRPIN_TH == 35.0
+        assert tier.PRIMER_MAX_END_STABILITY == 5.5
+        assert tier.PRIMER_PRODUCT_MAX_SIZE == 130
+
+    def test_apply_rescue_tier_overrides_singleplex(self):
+        config = DesignerConfig()
+        rescued = config.apply_rescue_tier(0)
+        assert rescued.singleplex_design_parameters.PRIMER_MIN_TM == 56.0
+        assert rescued.singleplex_design_parameters.PRIMER_MAX_TM == 64.0
+        assert rescued.singleplex_design_parameters.PRIMER_MAX_HAIRPIN_TH == 30.0
+        assert rescued.singleplex_design_parameters.PRIMER_MAX_END_STABILITY == 5.0
+
+    def test_apply_rescue_tier_overrides_pair_params(self):
+        config = DesignerConfig()
+        rescued = config.apply_rescue_tier(0)
+        assert rescued.primer_pair_parameters.PRIMER_PAIR_MAX_DIFF_TM == 4.0
+        # Tier 1 doesn't change amplicon size
+        assert rescued.primer_pair_parameters.PRIMER_PRODUCT_MAX_SIZE == 120
+
+    def test_apply_rescue_tier2_changes_amplicon_size(self):
+        config = DesignerConfig()
+        rescued = config.apply_rescue_tier(1)
+        assert rescued.primer_pair_parameters.PRIMER_PRODUCT_MAX_SIZE == 130
+
+    def test_apply_rescue_tier_does_not_mutate_original(self):
+        config = DesignerConfig()
+        config.apply_rescue_tier(0)
+        assert config.singleplex_design_parameters.PRIMER_MIN_TM == 57.0
+        assert config.primer_pair_parameters.PRIMER_PAIR_MAX_DIFF_TM == 3.0
+
+    def test_rescue_tier_none_fields_preserve_base(self):
+        """Tier with all None overrides should produce identical config."""
+        config = DesignerConfig(rescue_tiers=[RescueTier()])
+        rescued = config.apply_rescue_tier(0)
+        assert (
+            rescued.singleplex_design_parameters.PRIMER_MIN_TM
+            == config.singleplex_design_parameters.PRIMER_MIN_TM
+        )
+        assert (
+            rescued.primer_pair_parameters.PRIMER_PRODUCT_MAX_SIZE
+            == config.primer_pair_parameters.PRIMER_PRODUCT_MAX_SIZE
+        )
+
+    def test_rescue_tiers_loaded_from_preset(self):
+        config = DesignerConfig.from_preset("default")
+        assert config.enable_rescue is True
+        assert len(config.rescue_tiers) == 2
+        assert config.rescue_tiers[0].PRIMER_MIN_TM == 56.0
+
+    def test_rescue_disabled_via_dict(self):
+        config = DesignerConfig.from_dict({"enable_rescue": False})
+        assert config.enable_rescue is False
+
+    def test_rescue_tiers_roundtrip(self):
+        config = DesignerConfig()
+        data = config.to_dict()
+        restored = DesignerConfig.from_dict(data)
+        assert len(restored.rescue_tiers) == 2
+        assert restored.rescue_tiers[0].PRIMER_MIN_TM == 56.0
+        assert restored.rescue_tiers[1].PRIMER_PRODUCT_MAX_SIZE == 130
 
 
 class TestLoadConfig:

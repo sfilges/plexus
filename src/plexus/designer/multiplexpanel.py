@@ -844,6 +844,7 @@ class MultiplexPanel:
                     "Forward_Penalty": pair.forward.penalty,
                     "Reverse_Penalty": pair.reverse.penalty,
                     "Amplicon_GC": pair.amplicon_gc,
+                    "Rescue_Tier": pair.rescue_tier,
                     "Num_Candidate_Pairs": (
                         len(junction.primer_pairs) if junction.primer_pairs else 0
                     ),
@@ -926,6 +927,7 @@ class MultiplexPanel:
             "Forward_Penalty": pair.forward.penalty,
             "Reverse_Penalty": pair.reverse.penalty,
             "Amplicon_GC": pair.amplicon_gc,
+            "Rescue_Tier": pair.rescue_tier,
             "Num_Candidate_Pairs": (
                 len(junction.primer_pairs) if junction.primer_pairs else 0
             ),

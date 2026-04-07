@@ -435,6 +435,47 @@ class BlastParameters(BaseModel):
     )
 
 
+class RescueTier(BaseModel):
+    """Parameter overrides for a single rescue tier.
+
+    Only fields that are not None will override the base config.
+    """
+
+    PRIMER_MIN_TM: float | None = None
+    PRIMER_MAX_TM: float | None = None
+    PRIMER_MAX_HAIRPIN_TH: float | None = None
+    PRIMER_MAX_END_STABILITY: float | None = None
+    PRIMER_PAIR_MAX_DIFF_TM: float | None = None
+    PRIMER_PRODUCT_MAX_SIZE: int | None = None
+
+    description: str = Field(
+        default="",
+        description="Human-readable label for log messages.",
+    )
+
+
+def _default_rescue_tiers() -> list[RescueTier]:
+    return [
+        RescueTier(
+            PRIMER_MIN_TM=56.0,
+            PRIMER_MAX_TM=64.0,
+            PRIMER_PAIR_MAX_DIFF_TM=4.0,
+            PRIMER_MAX_HAIRPIN_TH=30.0,
+            PRIMER_MAX_END_STABILITY=5.0,
+            description="Tier 1: relaxed Tm 56-64, hairpin 30, end-stab 5.0",
+        ),
+        RescueTier(
+            PRIMER_MIN_TM=55.0,
+            PRIMER_MAX_TM=65.0,
+            PRIMER_PAIR_MAX_DIFF_TM=5.0,
+            PRIMER_MAX_HAIRPIN_TH=35.0,
+            PRIMER_MAX_END_STABILITY=5.5,
+            PRIMER_PRODUCT_MAX_SIZE=130,
+            description="Tier 2: relaxed Tm 55-65, hairpin 35, end-stab 5.5, amplicon 130",
+        ),
+    ]
+
+
 class DesignerConfig(BaseModel):
     """Complete configuration for multiplex primer panel design."""
 
@@ -450,6 +491,50 @@ class DesignerConfig(BaseModel):
     )
     snp_check_parameters: SnpCheckParameters = Field(default_factory=SnpCheckParameters)
     blast_parameters: BlastParameters = Field(default_factory=BlastParameters)
+
+    enable_rescue: bool = Field(
+        default=True,
+        description=(
+            "Automatically retry failed junctions with progressively relaxed "
+            "thermodynamic thresholds. Rescue tiers never relax sequence-composition "
+            "filters (GC%, poly-X, poly-GC)."
+        ),
+    )
+    rescue_tiers: list[RescueTier] = Field(default_factory=_default_rescue_tiers)
+
+    def apply_rescue_tier(self, tier_index: int) -> DesignerConfig:
+        """Return a copy of this config with the given rescue tier's overrides applied."""
+        tier = self.rescue_tiers[tier_index]
+
+        singleplex_overrides: dict[str, Any] = {}
+        pair_overrides: dict[str, Any] = {}
+
+        for field_name in (
+            "PRIMER_MIN_TM",
+            "PRIMER_MAX_TM",
+            "PRIMER_MAX_HAIRPIN_TH",
+            "PRIMER_MAX_END_STABILITY",
+        ):
+            value = getattr(tier, field_name)
+            if value is not None:
+                singleplex_overrides[field_name] = value
+
+        for field_name in ("PRIMER_PAIR_MAX_DIFF_TM", "PRIMER_PRODUCT_MAX_SIZE"):
+            value = getattr(tier, field_name)
+            if value is not None:
+                pair_overrides[field_name] = value
+
+        new_singleplex = self.singleplex_design_parameters.model_copy(
+            update=singleplex_overrides
+        )
+        new_pair = self.primer_pair_parameters.model_copy(update=pair_overrides)
+
+        return self.model_copy(
+            update={
+                "singleplex_design_parameters": new_singleplex,
+                "primer_pair_parameters": new_pair,
+            }
+        )
 
     @classmethod
     def from_json_file(cls, file_path: str | Path) -> DesignerConfig:

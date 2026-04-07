@@ -551,6 +551,21 @@ def run_pipeline(
                             f"Junction '{fj.name}' failed primer design: {err_msg}"
                         )
 
+                # Report rescued junctions
+                rescued = [
+                    jn
+                    for jn in panel.junctions
+                    if jn.primer_pairs and getattr(jn, "_rescue_tier", 0) > 0
+                ]
+                if rescued:
+                    for rj in rescued:
+                        tier_idx = rj._rescue_tier
+                        tier = panel.config.rescue_tiers[tier_idx - 1]
+                        result.warnings.append(
+                            f"Junction '{rj.name}' rescued at tier {tier_idx} "
+                            f"({tier.description})"
+                        )
+
                 if not panel.junctions:
                     logger.error("All junctions failed primer design. Cannot continue.")
                     result.errors.append("All junctions failed primer design.")

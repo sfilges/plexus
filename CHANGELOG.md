@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 02-04-2026
+
+### Added
+
+- **Tiered rescue for failed primer design** (`config.py`, `designer/design.py`): Junctions that produce zero valid primer pairs under default thermodynamic constraints are now automatically retried with progressively relaxed parameters. Two rescue tiers are applied sequentially:
+  - **Tier 1**: Tm 56-64°C (from 57-63), max pair ΔTm 4°C (from 3), hairpin Tm 30°C (from 24), end stability 5.0 (from 4.5).
+  - **Tier 2**: Tm 55-65°C, max pair ΔTm 5°C, hairpin Tm 35°C, end stability 5.5, max amplicon 130bp (from 120).
+  Sequence-composition filters (poly-GC ≤3, GC%, poly-X) are never relaxed. K-mers are generated once and reused across tiers. Rescue can be disabled via `enable_rescue: false` in the config.
+- **Rescue tier configuration** (`config.py`, preset JSON files): New `RescueTier` model and `rescue_tiers` list on `DesignerConfig` allow customisation of rescue thresholds. `DesignerConfig.apply_rescue_tier()` returns a modified config copy with tier overrides applied.
+- **Rescue tier in output** (`designer/multiplexpanel.py`, `designer/primer.py`): `PrimerPair.rescue_tier` field (0=standard, 1/2=rescued). `Rescue_Tier` column added to `candidate_pairs.csv`, `selected_multiplex.csv`, and `top_panels.csv`.
+- **Rescued junction reporting** (`pipeline.py`): Junctions rescued via relaxed parameters are logged and included in `panel_summary.json` warnings with tier description.
+- **Improved failure diagnostics** (`designer/design.py`): When all rescue tiers are exhausted, the minimum achievable amplicon size from surviving primers is computed and reported in the error message and `failed_junctions.csv`.
+
+### Fixed
+
+- **Stale test assertions** (`tests/test_config.py`): Fixed pre-existing test failures where `target_plexity` default was asserted as 20 (actual: 24) and `max_amplicon_size` default as 2000 (actual: 1000).
+
 ## [1.2.0] - 26-03-2026
 
 ### Added

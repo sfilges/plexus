@@ -70,6 +70,7 @@ class PrimerPair:
     selected: bool = False
     snp_count: int = 0
     snp_penalty: float = 0.0
+    rescue_tier: int = 0
 
     @property
     def amplicon_gc(self) -> float | None:
