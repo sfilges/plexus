@@ -310,6 +310,10 @@ def run_pipeline(
     snp_strict: bool = False,
     selector: str = "Greedy",
     selector_seed: int | None = None,
+    allow_target_dropping: bool = False,
+    dropout_stringency: float | None = None,
+    min_target_fraction: float | None = None,
+    min_targets: int | None = None,
     blast_num_threads: int = 4,
     debug: bool = False,
     fasta_sha256: str | None = None,
@@ -428,6 +432,16 @@ def run_pipeline(
     # Override config seed if provided as argument
     if selector_seed is not None:
         config.multiplex_picker_parameters.selector_seed = selector_seed
+
+    # Override target dropout settings if provided as CLI arguments
+    if allow_target_dropping:
+        config.multiplex_picker_parameters.allow_target_dropping = True
+    if dropout_stringency is not None:
+        config.multiplex_picker_parameters.dropout_stringency = dropout_stringency
+    if min_target_fraction is not None:
+        config.multiplex_picker_parameters.min_target_fraction = min_target_fraction
+    if min_targets is not None:
+        config.multiplex_picker_parameters.minimum_plexity = min_targets
 
     # ── Chromosome naming consistency check ──────────────────────────────────
     effective_snp_vcf = (

@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 08-04-2026
+
+### Added
+
+- **CLI flags for target dropout** (`cli.py`, `pipeline.py`): New command-line arguments `--allow-target-dropping`, `--dropout-stringency`, `--min-target-fraction`, and `--min-targets` allow controlling the DFS target dropout feature without editing the JSON config file. CLI arguments override config file values, following the same pattern as `--selector-seed`.
+
 ## [1.2.1] - 02-04-2026
 
 ### Added

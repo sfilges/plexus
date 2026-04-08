@@ -11,7 +11,7 @@
         "PRIMER_MIN_BOUND": -10.0,
         "PRIMER_MAX_BOUND": 110.0,
         "junction_padding_bases": 3,
-        "forward_tail": "GGACACTCTTTCCCTACACGACGCTCTTCCGATCTAAAAAAAAAAAAAAAAAAAATGGGAAAGAGTGTCC",
+        "forward_tail": "GGACACTCTTTCCCTACACGACGCTCTTCCGATCTNNNAAANNANNAAANNNATGGGAAAGAGTGTCC",
         "reverse_tail": "GTGACTGGAGTTCAGACGTGTGCTCTTCCGATCT",
         "primer_length_penalty": 1.0,
         "primer_complexity_penalty": 1.0,

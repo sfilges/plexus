@@ -177,6 +177,34 @@ def run(
             help="Random seed for stochastic selectors (Greedy, Random, SimulatedAnnealing).",
         ),
     ] = None,
+    allow_target_dropping: Annotated[
+        bool,
+        typer.Option(
+            "--allow-target-dropping",
+            help="Allow the DFS selector to drop targets with extreme cross-dimer toxicity.",
+        ),
+    ] = False,
+    dropout_stringency: Annotated[
+        float | None,
+        typer.Option(
+            "--dropout-stringency",
+            help="Percentile (0-1) of marginal cross-dimer distribution for dropout penalty. Higher = fewer drops (default: 0.8).",
+        ),
+    ] = None,
+    min_target_fraction: Annotated[
+        float | None,
+        typer.Option(
+            "--min-target-fraction",
+            help="Minimum fraction of input targets to retain (default: 0.8).",
+        ),
+    ] = None,
+    min_targets: Annotated[
+        int | None,
+        typer.Option(
+            "--min-targets",
+            help="Hard floor on minimum number of targets to retain (overrides minimum_plexity).",
+        ),
+    ] = None,
     blast_threads: Annotated[
         int,
         typer.Option(
@@ -342,6 +370,10 @@ def run(
             snp_strict=snp_strict,
             selector=selector,
             selector_seed=selector_seed,
+            allow_target_dropping=allow_target_dropping,
+            dropout_stringency=dropout_stringency,
+            min_target_fraction=min_target_fraction,
+            min_targets=min_targets,
             blast_num_threads=blast_threads,
             debug=debug,
             fasta_sha256=fasta_sha256,
