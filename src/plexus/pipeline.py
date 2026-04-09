@@ -308,6 +308,7 @@ def run_pipeline(
     skip_snpcheck: bool = False,
     snp_af_threshold: float | None = None,
     snp_strict: bool = False,
+    rescue: bool = False,
     selector: str = "Greedy",
     selector_seed: int | None = None,
     allow_target_dropping: bool = False,
@@ -442,6 +443,10 @@ def run_pipeline(
         config.multiplex_picker_parameters.min_target_fraction = min_target_fraction
     if min_targets is not None:
         config.multiplex_picker_parameters.minimum_plexity = min_targets
+
+    # Override rescue if requested via CLI
+    if rescue:
+        config.enable_rescue = True
 
     # ── Chromosome naming consistency check ──────────────────────────────────
     effective_snp_vcf = (

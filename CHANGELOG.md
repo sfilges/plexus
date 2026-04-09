@@ -7,8 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.2.2] - 08-04-2026
 
+### Changed
+
+- **Rescue tiers disabled by default** (`config.py`, preset JSON files, `pipeline.py`): `enable_rescue` now defaults to `false`. Junctions that fail at default thermodynamic thresholds are no longer automatically retried with relaxed parameters unless explicitly requested. Use the new `--rescue` CLI flag or set `"enable_rescue": true` in the config to activate tiered fallback.
+- **Tighter default amplicon size, uniform rescue cap** (`config.py`, preset JSON files): Default max amplicon size reduced from 120 bp to 100 bp. Both rescue tiers now cap at 120 bp (previously Tier 1 had no override and Tier 2 allowed 130 bp).
+
 ### Added
 
+- **`--rescue` CLI flag** (`cli.py`, `pipeline.py`): Activates tiered rescue for failed junctions, overriding the config default. Follows the same CLI-overrides-config pattern as `--snp-strict`.
 - **CLI flags for target dropout** (`cli.py`, `pipeline.py`): New command-line arguments `--allow-target-dropping`, `--dropout-stringency`, `--min-target-fraction`, and `--min-targets` allow controlling the DFS target dropout feature without editing the JSON config file. CLI arguments override config file values, following the same pattern as `--selector-seed`.
 
 ## [1.2.1] - 02-04-2026

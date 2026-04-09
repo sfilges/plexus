@@ -133,7 +133,7 @@ class PrimerPairParameters(BaseModel):
     PRIMER_PRODUCT_OPT_SIZE: int = Field(default=60, ge=30, le=500)
     PRIMER_PRODUCT_MIN_INSERT_SIZE: int = Field(default=20, ge=0, le=200)
     PRIMER_PRODUCT_MAX_INSERT_SIZE: int = Field(default=60, ge=10, le=500)
-    PRIMER_PRODUCT_MAX_SIZE: int = Field(default=120, ge=40, le=1000)
+    PRIMER_PRODUCT_MAX_SIZE: int = Field(default=100, ge=40, le=1000)
 
     # Penalty weights for pair scoring
     PRIMER_PAIR_WT_PR_PENALTY: float = Field(default=1.0, ge=0.0)
@@ -462,7 +462,8 @@ def _default_rescue_tiers() -> list[RescueTier]:
             PRIMER_PAIR_MAX_DIFF_TM=4.0,
             PRIMER_MAX_HAIRPIN_TH=30.0,
             PRIMER_MAX_END_STABILITY=5.0,
-            description="Tier 1: relaxed Tm 56-64, hairpin 30, end-stab 5.0",
+            PRIMER_PRODUCT_MAX_SIZE=120,
+            description="Tier 1: relaxed Tm 56-64, hairpin 30, end-stab 5.0, amplicon 120",
         ),
         RescueTier(
             PRIMER_MIN_TM=55.0,
@@ -470,8 +471,8 @@ def _default_rescue_tiers() -> list[RescueTier]:
             PRIMER_PAIR_MAX_DIFF_TM=5.0,
             PRIMER_MAX_HAIRPIN_TH=35.0,
             PRIMER_MAX_END_STABILITY=5.5,
-            PRIMER_PRODUCT_MAX_SIZE=130,
-            description="Tier 2: relaxed Tm 55-65, hairpin 35, end-stab 5.5, amplicon 130",
+            PRIMER_PRODUCT_MAX_SIZE=120,
+            description="Tier 2: relaxed Tm 55-65, hairpin 35, end-stab 5.5, amplicon 120",
         ),
     ]
 
@@ -493,7 +494,7 @@ class DesignerConfig(BaseModel):
     blast_parameters: BlastParameters = Field(default_factory=BlastParameters)
 
     enable_rescue: bool = Field(
-        default=True,
+        default=False,
         description=(
             "Automatically retry failed junctions with progressively relaxed "
             "thermodynamic thresholds. Rescue tiers never relax sequence-composition "

@@ -115,7 +115,7 @@ class TestPrimerPairParameters:
         params = PrimerPairParameters()
         assert params.PRIMER_PAIR_MAX_DIFF_TM == 3.0
         assert params.PRIMER_PRODUCT_OPT_SIZE == 60
-        assert params.PRIMER_PRODUCT_MAX_SIZE == 120
+        assert params.PRIMER_PRODUCT_MAX_SIZE == 100
 
     def test_insert_size_validation(self):
         """Test that min_insert > max_insert raises ValidationError."""
@@ -253,7 +253,7 @@ class TestDesignerConfig:
         """Test creating config with all defaults."""
         config = DesignerConfig()
         assert config.singleplex_design_parameters.PRIMER_OPT_TM == 60.0
-        assert config.primer_pair_parameters.PRIMER_PRODUCT_MAX_SIZE == 120
+        assert config.primer_pair_parameters.PRIMER_PRODUCT_MAX_SIZE == 100
         assert config.pcr_conditions.annealing_temperature == 60.0
         assert config.multiplex_picker_parameters.target_plexity == 24
 
@@ -273,7 +273,7 @@ class TestDesignerConfig:
         assert config.singleplex_design_parameters.PRIMER_OPT_TM == 62.0
         assert config.pcr_conditions.annealing_temperature == 58.0
         # Defaults preserved
-        assert config.primer_pair_parameters.PRIMER_PRODUCT_MAX_SIZE == 120
+        assert config.primer_pair_parameters.PRIMER_PRODUCT_MAX_SIZE == 100
 
     def test_from_dict_invalid(self):
         """Test that invalid dict raises ValidationError."""
@@ -386,9 +386,9 @@ class TestDesignerConfig:
 class TestRescueConfig:
     """Tests for rescue tier configuration."""
 
-    def test_enable_rescue_defaults_true(self):
+    def test_enable_rescue_defaults_false(self):
         config = DesignerConfig()
-        assert config.enable_rescue is True
+        assert config.enable_rescue is False
 
     def test_default_rescue_tiers_count(self):
         config = DesignerConfig()
@@ -402,7 +402,7 @@ class TestRescueConfig:
         assert tier.PRIMER_PAIR_MAX_DIFF_TM == 4.0
         assert tier.PRIMER_MAX_HAIRPIN_TH == 30.0
         assert tier.PRIMER_MAX_END_STABILITY == 5.0
-        assert tier.PRIMER_PRODUCT_MAX_SIZE is None
+        assert tier.PRIMER_PRODUCT_MAX_SIZE == 120
 
     def test_rescue_tier2_values(self):
         config = DesignerConfig()
@@ -412,7 +412,7 @@ class TestRescueConfig:
         assert tier.PRIMER_PAIR_MAX_DIFF_TM == 5.0
         assert tier.PRIMER_MAX_HAIRPIN_TH == 35.0
         assert tier.PRIMER_MAX_END_STABILITY == 5.5
-        assert tier.PRIMER_PRODUCT_MAX_SIZE == 130
+        assert tier.PRIMER_PRODUCT_MAX_SIZE == 120
 
     def test_apply_rescue_tier_overrides_singleplex(self):
         config = DesignerConfig()
@@ -426,13 +426,13 @@ class TestRescueConfig:
         config = DesignerConfig()
         rescued = config.apply_rescue_tier(0)
         assert rescued.primer_pair_parameters.PRIMER_PAIR_MAX_DIFF_TM == 4.0
-        # Tier 1 doesn't change amplicon size
+        # Tier 1 sets amplicon size to 120
         assert rescued.primer_pair_parameters.PRIMER_PRODUCT_MAX_SIZE == 120
 
     def test_apply_rescue_tier2_changes_amplicon_size(self):
         config = DesignerConfig()
         rescued = config.apply_rescue_tier(1)
-        assert rescued.primer_pair_parameters.PRIMER_PRODUCT_MAX_SIZE == 130
+        assert rescued.primer_pair_parameters.PRIMER_PRODUCT_MAX_SIZE == 120
 
     def test_apply_rescue_tier_does_not_mutate_original(self):
         config = DesignerConfig()
@@ -455,7 +455,7 @@ class TestRescueConfig:
 
     def test_rescue_tiers_loaded_from_preset(self):
         config = DesignerConfig.from_preset("default")
-        assert config.enable_rescue is True
+        assert config.enable_rescue is False
         assert len(config.rescue_tiers) == 2
         assert config.rescue_tiers[0].PRIMER_MIN_TM == 56.0
 
@@ -469,7 +469,7 @@ class TestRescueConfig:
         restored = DesignerConfig.from_dict(data)
         assert len(restored.rescue_tiers) == 2
         assert restored.rescue_tiers[0].PRIMER_MIN_TM == 56.0
-        assert restored.rescue_tiers[1].PRIMER_PRODUCT_MAX_SIZE == 130
+        assert restored.rescue_tiers[1].PRIMER_PRODUCT_MAX_SIZE == 120
 
 
 class TestLoadConfig:

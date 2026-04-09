@@ -162,6 +162,13 @@ def run(
             help="Discard primer pairs that overlap SNPs.",
         ),
     ] = False,
+    rescue: Annotated[
+        bool,
+        typer.Option(
+            "--rescue",
+            help="Retry failed junctions with progressively relaxed thermodynamic thresholds.",
+        ),
+    ] = False,
     selector: Annotated[
         str,
         typer.Option(
@@ -368,6 +375,7 @@ def run(
             skip_snpcheck=skip_snpcheck,
             snp_af_threshold=snp_af_threshold,
             snp_strict=snp_strict,
+            rescue=rescue,
             selector=selector,
             selector_seed=selector_seed,
             allow_target_dropping=allow_target_dropping,

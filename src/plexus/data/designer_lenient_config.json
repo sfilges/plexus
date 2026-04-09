@@ -85,7 +85,7 @@
         "max_amplicon_size": 1000,
         "ontarget_tolerance": 5
     },
-    "enable_rescue": true,
+    "enable_rescue": false,
     "rescue_tiers": [
         {
             "PRIMER_MIN_TM": 56.0,
@@ -93,7 +93,8 @@
             "PRIMER_PAIR_MAX_DIFF_TM": 4.0,
             "PRIMER_MAX_HAIRPIN_TH": 30.0,
             "PRIMER_MAX_END_STABILITY": 5.0,
-            "description": "Tier 1: relaxed Tm 56-64, hairpin 30, end-stab 5.0"
+            "PRIMER_PRODUCT_MAX_SIZE": 120,
+            "description": "Tier 1: relaxed Tm 56-64, hairpin 30, end-stab 5.0, amplicon 120"
         },
         {
             "PRIMER_MIN_TM": 55.0,
@@ -101,8 +102,8 @@
             "PRIMER_PAIR_MAX_DIFF_TM": 5.0,
             "PRIMER_MAX_HAIRPIN_TH": 35.0,
             "PRIMER_MAX_END_STABILITY": 5.5,
-            "PRIMER_PRODUCT_MAX_SIZE": 130,
-            "description": "Tier 2: relaxed Tm 55-65, hairpin 35, end-stab 5.5, amplicon 130"
+            "PRIMER_PRODUCT_MAX_SIZE": 120,
+            "description": "Tier 2: relaxed Tm 55-65, hairpin 35, end-stab 5.5, amplicon 120"
         }
     ],
     "multiplex_picker_parameters": {
